@@ -1,26 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* Font Family Definitions */
+  --font-display: "Epilogue", sans-serif;
+  --font-sans: "Plus Jakarta Sans", sans-serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Colors */
+  --color-surface: #f9f9f8;
+  --color-on-surface: #1b1b1b;
+  --color-on-surface-variant: #848484;
+  --color-outline-variant: #cfc4c5;
+  --color-surface-container-low: #f3f4f6;
+  --color-surface-container-high: #e5e7eb;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container: #f3f4f6;
+  --color-primary-container: #f5fda9;
+  --color-secondary-container: #e0def0;
+  --color-background: #f9f9f8;
+  --color-secondary: #5e5e5e;
+  --color-outline: #5e5e5e;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Spacing Scale Extensions */
+  --spacing-sidebar-width: 260px;
+  --spacing-card-padding: 24px;
+  --spacing-margin-desktop: 40px;
+  --spacing-margin-mobile: 16px;
+  --spacing-gutter: 16px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
 }
