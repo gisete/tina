@@ -36,7 +36,7 @@ export default async function DashboardOverviewPage() {
 
   let data: Awaited<ReturnType<typeof syncAndFetchSleepAnalytics>> | undefined;
   try {
-    data = await syncAndFetchSleepAnalytics(14);
+    data = await syncAndFetchSleepAnalytics(30);
   } catch (error) {
     console.error("Overview sync error:", error);
   }

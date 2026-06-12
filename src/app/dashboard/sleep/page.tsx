@@ -4,22 +4,26 @@ import { auth } from "@/auth";
 import { syncAndFetchSleepAnalytics } from "@/app/actions/sync";
 import SleepCharts from "../components/sleep-charts";
 import HypnogramChart from "../components/hypnogram-chart";
+import DateNavigator from "../components/date-navigator";
+import ContinuityExplainer from "../components/continuity-explainer";
+import NightHeartChart from "../components/night-heart-chart";
+import { localToday } from "@/lib/dates";
+import { formatClockTime } from "@/lib/format";
 
-function formatSessionTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-export default async function SleepPage() {
+export default async function SleepPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) return null;
 
+  const params = await searchParams;
+  const targetDate = params.date || localToday();
+
   let data: Awaited<ReturnType<typeof syncAndFetchSleepAnalytics>> | undefined;
   try {
-    data = await syncAndFetchSleepAnalytics(14);
+    data = await syncAndFetchSleepAnalytics(30, targetDate);
   } catch (error) {
     console.error("Sleep page sync error:", error);
   }
@@ -28,11 +32,14 @@ export default async function SleepPage() {
     <div className="p-margin-mobile md:p-margin-desktop max-w-7xl mx-auto space-y-6 py-10 pb-24">
 
       {/* Page Headline Block */}
-      <div className="mb-8">
-        <h1 className="font-display text-4xl font-bold text-black mb-2 tracking-tight">Sleep Intelligence</h1>
-        <p className="text-base text-on-surface-variant max-w-2xl">
-          Analyze your sleep architecture, efficiency, and debt to optimize recovery and daily performance.
-        </p>
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-4xl font-bold text-black mb-2 tracking-tight">Sleep Intelligence</h1>
+          <p className="text-base text-on-surface-variant max-w-2xl">
+            Analyze your sleep architecture, efficiency, and debt to optimize recovery and daily performance.
+          </p>
+        </div>
+        <DateNavigator />
       </div>
 
       {!data || !data.hasData ? (
@@ -55,9 +62,9 @@ export default async function SleepPage() {
                   Sleep Timeline
                 </h2>
                 <p className="font-sans text-sm text-on-surface-variant mt-1">
-                  {formatSessionTime(data.lastNight.startTime)}
+                  {formatClockTime(data.lastNight.startTime)}
                   <span className="mx-2 text-outline-variant">–</span>
-                  {formatSessionTime(data.lastNight.endTime)}
+                  {formatClockTime(data.lastNight.endTime)}
                 </p>
               </div>
 
@@ -72,20 +79,68 @@ export default async function SleepPage() {
             </div>
           )}
 
+          {/* ── Overnight Heart Rate card ───────────────────────────────────── */}
+          {data.lastNight && data.nightHrSeries.length > 1 && (
+            <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
+              <div className="mb-6">
+                <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">
+                  Overnight Heart Rate
+                </h2>
+                <p className="font-sans text-sm text-on-surface-variant mt-1">
+                  Beats per minute across the night — dips below the dashed line mark restorative stretches.
+                </p>
+              </div>
+              <NightHeartChart
+                series={data.nightHrSeries}
+                sessionStart={data.lastNight.startTime}
+                sessionEnd={data.lastNight.endTime}
+                baselineRhr={data.nightHeart?.baselineRhr ?? data.heart?.overallBaseline?.avgRhr ?? null}
+              />
+            </div>
+          )}
+
           {/* ── Highlights Cards Grid ───────────────────────────────────────── */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-gutter">
 
             {/* Efficiency Card */}
             <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
               <div className="flex justify-between items-start mb-4">
-                <span className="text-sm font-medium text-on-surface-variant">Sleep Efficiency</span>
+                <span className="text-sm font-medium text-on-surface-variant">Sleep Intelligence Score</span>
                 <span className="px-2 py-0.5 bg-primary-container text-black font-semibold text-xs rounded-full">Target &gt;85%</span>
               </div>
               <div>
                 <div className="font-display text-4xl font-bold text-black tracking-tight">
-                  {Math.round((data.latestSummary?.efficiencyScore || 0) * 100)}<span className="text-xl text-on-surface-variant font-normal ml-0.5">%</span>
+                  {data.lastNight?.holisticScore || 0}<span className="text-xl text-on-surface-variant font-normal ml-0.5">%</span>
                 </div>
-                <div className="text-sm text-on-surface-variant mt-1">Optimal restorative window alignment</div>
+                <div className="text-sm text-on-surface-variant mt-1">Weighted composite of volume, efficiency, and continuity</div>
+              </div>
+            </div>
+
+            {/* Night Heart Rate Card */}
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-sm font-medium text-on-surface-variant">Night Heart Rate</span>
+                <span className={`px-2 py-0.5 font-semibold text-xs rounded-full ${
+                  data.nightHeart?.status === 'recovering' ? 'bg-emerald-100 text-emerald-800' :
+                  data.nightHeart?.status === 'strained' ? 'bg-amber-100 text-amber-800' :
+                  'bg-surface-container text-on-surface-variant'
+                }`}>
+                  {data.nightHeart?.status === 'insufficient' || !data.nightHeart
+                    ? 'No data'
+                    : data.nightHeart.status}
+                </span>
+              </div>
+              <div>
+                <div className="font-display text-4xl font-bold text-black tracking-tight">
+                  {data.nightHeart?.restingHr !== null && data.nightHeart?.restingHr !== undefined
+                    ? <>{data.nightHeart.restingHr}<span className="text-xl text-on-surface-variant font-normal ml-0.5">bpm</span></>
+                    : <span className="text-on-surface-variant">—</span>}
+                </div>
+                <div className="text-sm text-on-surface-variant mt-1">
+                  {data.nightHeart?.hrv !== null && data.nightHeart?.hrv !== undefined
+                    ? `${data.nightHeart.hrv} ms HRV${data.nightHeart.baselineRhr !== null ? ` · baseline ${data.nightHeart.baselineRhr} bpm` : ''}`
+                    : 'Awaiting overnight readings'}
+                </div>
               </div>
             </div>
 
@@ -129,12 +184,23 @@ export default async function SleepPage() {
               <h2 className="font-display text-xl font-bold text-black tracking-tight">Architecture Breakdown</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {/* Deep Sleep */}
               <div>
                 <div className="flex justify-between items-end mb-2">
                   <div>
-                    <span className="text-sm font-semibold text-on-surface">Deep Sleep</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-on-surface">Deep Sleep</span>
+                      {data.lastNight?.continuity && (
+                        <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-sm ${
+                          data.lastNight.continuity.status === 'consolidated' ? 'bg-indigo-100 text-indigo-800' :
+                          data.lastNight.continuity.status === 'fragmented' ? 'bg-amber-100 text-amber-800' :
+                          'bg-surface-container text-on-surface-variant'
+                        }`}>
+                          {data.lastNight.continuity.status}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-on-surface-variant mt-0.5">Physical recovery & muscular restoration</p>
                   </div>
                   <div className="text-right">
@@ -150,6 +216,9 @@ export default async function SleepPage() {
                     style={{ width: `${data.analytics?.architecture?.deepPercentage || 0}%` }}
                   />
                 </div>
+                {data.lastNight?.continuity && (
+                  <ContinuityExplainer stage="deep" data={data.lastNight.continuity} />
+                )}
               </div>
 
               {/* REM Sleep */}
@@ -172,6 +241,45 @@ export default async function SleepPage() {
                     style={{ width: `${data.analytics?.architecture?.remPercentage || 0}%` }}
                   />
                 </div>
+                {data.lastNight?.remContinuity && (
+                  <ContinuityExplainer stage="rem" data={data.lastNight.remContinuity} />
+                )}
+              </div>
+
+              {/* Light Sleep */}
+              <div>
+                <div className="flex justify-between items-end mb-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-on-surface">Light Sleep</span>
+                      {data.lastNight?.lightStability && (
+                        <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-sm ${
+                          data.lastNight.lightStability.status === 'optimal' ? 'bg-emerald-100 text-emerald-800' :
+                          data.lastNight.lightStability.status === 'disruptive' ? 'bg-red-100 text-red-800' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {data.lastNight.lightStability.status}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-on-surface-variant mt-0.5">Transitionary bridge & basal processing</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-display text-lg font-bold text-black">
+                      {data.analytics?.architecture?.lightPercentage || 0}%
+                    </span>
+                    <span className="text-xs text-on-surface-variant ml-1">/ Target 50-60%</span>
+                  </div>
+                </div>
+                <div className="h-2 w-full bg-surface-container-high rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-400 rounded-full transition-all duration-500 border border-outline-variant"
+                    style={{ width: `${data.analytics?.architecture?.lightPercentage || 0}%` }}
+                  />
+                </div>
+                {data.lastNight?.lightStability && (
+                  <ContinuityExplainer stage="light" data={data.lastNight.lightStability} />
+                )}
               </div>
             </div>
           </div>

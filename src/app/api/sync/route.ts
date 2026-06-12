@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const daysToSync = parseInt(searchParams.get("days") ?? "14", 10);
+    const daysToSync = parseInt(searchParams.get("days") ?? "30", 10);
 
     const result = await syncAndFetchSleepAnalytics(daysToSync);
 

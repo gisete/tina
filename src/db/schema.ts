@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, real, date, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, real, date, pgEnum, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 import { primaryKey } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -22,9 +22,13 @@ export const sleepSessions = pgTable("sleep_sessions", {
   endTime: timestamp("end_time").notNull(),
   totalSleepMs: integer("total_sleep_ms").notNull(),
   efficiencyScore: real("efficiency_score").notNull(),
+  continuityScore: integer("continuity_score"),
+  timelineRaw: jsonb("timeline_raw"),
   source: text("source").default("google_health").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [
+  uniqueIndex("sleep_sessions_user_id_date_idx").on(t.userId, t.sleepDate),
+]);
 
 export const sleepStages = pgTable("sleep_stages", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -51,9 +55,27 @@ export const heartRateSummaries = pgTable(
   ]
 );
 
+export const heartRateSamples = pgTable(
+  "heart_rate_samples",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    timestamp: timestamp("timestamp").notNull(),
+    bpm: integer("bpm").notNull(),
+  },
+  (t) => [
+    uniqueIndex("heart_rate_samples_user_id_timestamp_idx").on(t.userId, t.timestamp),
+  ]
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sleepSessions: many(sleepSessions),
   heartRateSummaries: many(heartRateSummaries),
+  heartRateSamples: many(heartRateSamples),
+}));
+
+export const heartRateSamplesRelations = relations(heartRateSamples, ({ one }) => ({
+  user: one(users, { fields: [heartRateSamples.userId], references: [users.id] }),
 }));
 
 export const sleepSessionsRelations = relations(sleepSessions, ({ one, many }) => ({

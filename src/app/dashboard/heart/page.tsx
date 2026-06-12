@@ -3,6 +3,8 @@
 import { auth } from "@/auth";
 import { syncAndFetchSleepAnalytics } from "@/app/actions/sync";
 import HeartCharts from "../components/heart-charts";
+import DateNavigator from "../components/date-navigator";
+import { localToday } from "@/lib/dates";
 
 function statusBadge(status: string): string {
   if (status === "Elevated Stress") return "bg-amber-100 text-amber-700";
@@ -10,13 +12,20 @@ function statusBadge(status: string): string {
   return "bg-surface-container text-on-surface-variant";
 }
 
-export default async function HeartPage() {
+export default async function HeartPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) return null;
 
+  const params = await searchParams;
+  const targetDate = params.date || localToday();
+
   let data: Awaited<ReturnType<typeof syncAndFetchSleepAnalytics>> | undefined;
   try {
-    data = await syncAndFetchSleepAnalytics(14);
+    data = await syncAndFetchSleepAnalytics(30, targetDate);
   } catch (error) {
     console.error("Heart page sync error:", error);
   }
@@ -42,11 +51,14 @@ export default async function HeartPage() {
     <div className="p-margin-mobile md:p-margin-desktop max-w-7xl mx-auto space-y-6 py-10 pb-24">
 
       {/* Page Headline */}
-      <div className="mb-8">
-        <h1 className="font-display text-4xl font-bold text-black mb-2 tracking-tight">Heart Health</h1>
-        <p className="text-base text-on-surface-variant max-w-2xl">
-          Monitor resting heart rate and HRV trends to gauge cardiovascular fitness and daily autonomic recovery load.
-        </p>
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-4xl font-bold text-black mb-2 tracking-tight">Heart Health</h1>
+          <p className="text-base text-on-surface-variant max-w-2xl">
+            Monitor resting heart rate and HRV trends to gauge cardiovascular fitness and daily autonomic recovery load.
+          </p>
+        </div>
+        <DateNavigator />
       </div>
 
       {!hasHeartData ? (

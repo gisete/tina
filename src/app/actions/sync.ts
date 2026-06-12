@@ -2,27 +2,39 @@
 
 import { auth } from "@/auth";
 import { db } from "@/db/client";
-import { sleepSessions, sleepStages, heartRateSummaries } from "@/db/schema";
-import { fetchGoogleSleepData, fetchGoogleHeartData } from "@/lib/google/client";
-import { normalizeGoogleSleepSession, normalizeHeartData } from "@/lib/google/normalizers";
+import { sleepSessions, heartRateSummaries, heartRateSamples } from "@/db/schema";
 import {
-  calculateSleepArchitecture,
-  calculateCircadianVariance,
-  calculateSleepDebt,
-  getLastNightDetail,
-} from "@/lib/analytics/sleep";
-import { calculateHeartAnalytics } from "@/lib/analytics/heart";
-import { eq, and, desc, sql } from "drizzle-orm";
+  fetchGoogleSleepData,
+  fetchGoogleHeartData,
+  fetchGoogleHeartRateSamples,
+} from "@/lib/google/client";
+import {
+  normalizeGoogleSleepSession,
+  normalizeHeartData,
+  normalizeHeartRateSamples,
+} from "@/lib/google/normalizers";
+import { persistHealthRecords, persistHeartRateSamples } from "@/lib/sync/persist";
+import { assembleDashboardData } from "@/lib/sync/assemble";
+import { eq, and, asc, desc, gte, lt, lte } from "drizzle-orm";
 
-export async function syncAndFetchSleepAnalytics(daysToSync: number = 14) {
+/**
+ * Orchestrates one dashboard data cycle: fetch from Google Health, normalize,
+ * persist, then assemble analytics from historical rows. The heavy lifting
+ * lives in `@/lib/sync` (persistence + pure assembly) and `@/lib/analytics`.
+ *
+ * @param targetDate Optional "YYYY-MM-DD" anchor. When provided, the sync
+ * window ends on that date and all analytics queries exclude later records,
+ * so the dashboard reflects the state as of that day. Defaults to now.
+ */
+export async function syncAndFetchSleepAnalytics(daysToSync: number = 30, targetDate?: string) {
   const session = await auth();
   if (!session?.user?.id) {
     throw new Error("Unauthorized: You must be logged in to sync data.");
   }
   const userId = session.user.id;
 
-  const endDate = new Date();
-  const startDate = new Date();
+  const endDate = targetDate ? new Date(`${targetDate}T23:59:59`) : new Date();
+  const startDate = new Date(endDate);
   startDate.setDate(endDate.getDate() - daysToSync);
   const startISO = startDate.toISOString();
   const endISO = endDate.toISOString();
@@ -39,15 +51,12 @@ export async function syncAndFetchSleepAnalytics(daysToSync: number = 14) {
     if (sleepResult.status === "rejected") {
       throw sleepResult.reason;
     }
-    const rawSessions = sleepResult.value;
-
     if (heartResult.status === "rejected") {
       console.warn("[sync] Heart data fetch failed (continuing):", heartResult.reason?.message ?? heartResult.reason);
     }
     const rawHeartData = heartResult.status === "fulfilled" ? heartResult.value : null;
 
-    // Normalize both streams before touching the database
-    const normalizedSleep = rawSessions
+    const normalizedSleep = sleepResult.value
       .map((raw) => normalizeGoogleSleepSession(userId, raw))
       .filter((n): n is NonNullable<typeof n> => n !== null);
 
@@ -57,136 +66,84 @@ export async function syncAndFetchSleepAnalytics(daysToSync: number = 14) {
 
     console.log(`[sync] Normalized: ${normalizedSleep.length} sleep sessions, ${heartRecords.length} heart records`);
 
-    // -----------------------------------------------------------------------
-    // Single transaction: all sleep inserts + bulk heart upsert
-    // -----------------------------------------------------------------------
-    await db.transaction(async (tx) => {
-
-      // --- Sleep (check-then-insert to avoid re-inserting duplicate stage rows) ---
-      for (const { session: sleepSession, stages } of normalizedSleep) {
-        const existing = await tx
-          .select({ id: sleepSessions.id })
-          .from(sleepSessions)
-          .where(and(
-            eq(sleepSessions.userId, userId),
-            eq(sleepSessions.sleepDate, sleepSession.sleepDate),
-          ))
-          .limit(1);
-
-        if (existing.length === 0) {
-          await tx.insert(sleepSessions).values(sleepSession);
-          if (stages.length > 0) {
-            await tx.insert(sleepStages).values(stages);
-          }
-          console.log(`[sync] Inserted sleep session for ${sleepSession.sleepDate}`);
-        } else {
-          console.log(`[sync] Skipped duplicate sleep for ${sleepSession.sleepDate}`);
-        }
-      }
-
-      // --- Heart (bulk upsert on the (userId, date) unique index) ---
-      if (heartRecords.length > 0) {
-        await tx
-          .insert(heartRateSummaries)
-          .values(heartRecords.map((r) => ({
-            userId: r.userId,
-            date: r.date,
-            restingHeartRate: r.restingHeartRate,
-            hrvRmssd: r.hrvRmssd,
-          })))
-          .onConflictDoUpdate({
-            target: [heartRateSummaries.userId, heartRateSummaries.date],
-            set: {
-              // Use EXCLUDED to pick up the freshest values from the incoming row.
-              // COALESCE preserves an existing non-null reading if the new fetch
-              // returned null for that metric on the same day.
-              restingHeartRate: sql`COALESCE(EXCLUDED.resting_heart_rate, ${heartRateSummaries.restingHeartRate})`,
-              hrvRmssd: sql`COALESCE(EXCLUDED.hrv_rmssd, ${heartRateSummaries.hrvRmssd})`,
-              updatedAt: sql`NOW()`,
-            },
-          });
-        console.log(`[sync] Upserted ${heartRecords.length} heart records`);
-      }
-    });
+    await persistHealthRecords(userId, normalizedSleep, heartRecords);
 
     // -----------------------------------------------------------------------
     // Query historical data for analytics (parallel reads)
     // -----------------------------------------------------------------------
     const [historicalSessions, historicalHeartRows] = await Promise.all([
+      // Sessions are stored under the date the night STARTED, but a selected
+      // day should show the night the user woke up from that morning — hence
+      // strictly-before. (Selecting today = the session that started yesterday
+      // evening; each step back moves exactly one night.)
       db.query.sleepSessions.findMany({
-        where: eq(sleepSessions.userId, userId),
+        where: targetDate
+          ? and(eq(sleepSessions.userId, userId), lt(sleepSessions.sleepDate, targetDate))
+          : eq(sleepSessions.userId, userId),
         orderBy: [desc(sleepSessions.sleepDate)],
-        limit: 30,
+        limit: 45,
         with: { stages: true },
       }),
+      // Heart summaries are calendar-day readings, so the selected day itself
+      // is included.
       db.query.heartRateSummaries.findMany({
-        where: eq(heartRateSummaries.userId, userId),
+        where: targetDate
+          ? and(eq(heartRateSummaries.userId, userId), lte(heartRateSummaries.date, targetDate))
+          : eq(heartRateSummaries.userId, userId),
         orderBy: [desc(heartRateSummaries.date)],
-        limit: 30,
+        limit: 45,
       }),
     ]);
 
     console.log(`[sync] Historical: ${historicalSessions.length} sleep sessions, ${historicalHeartRows.length} heart rows`);
 
-    if (historicalSessions.length === 0) {
-      return { hasData: false as const, message: "No sleep records processed yet." };
+    // -----------------------------------------------------------------------
+    // Intra-night heart rate samples for the displayed night. Served from the
+    // heart_rate_samples cache; fetched from Google once per night when the
+    // cache is sparse. Treated as optional — chart absence shouldn't fail the
+    // page.
+    // -----------------------------------------------------------------------
+    let nightSamples: Array<{ timestamp: Date; bpm: number }> = [];
+    const displayedSession = historicalSessions[0];
+    if (displayedSession) {
+      const readSamples = () =>
+        db.query.heartRateSamples.findMany({
+          where: and(
+            eq(heartRateSamples.userId, userId),
+            gte(heartRateSamples.timestamp, displayedSession.startTime),
+            lte(heartRateSamples.timestamp, displayedSession.endTime),
+          ),
+          orderBy: [asc(heartRateSamples.timestamp)],
+        });
+
+      nightSamples = await readSamples();
+      if (nightSamples.length < 10) {
+        try {
+          const raw = await fetchGoogleHeartRateSamples(
+            userId,
+            displayedSession.startTime.toISOString(),
+            displayedSession.endTime.toISOString()
+          );
+          const normalized = normalizeHeartRateSamples(userId, raw);
+          if (normalized.length > 0) {
+            await persistHeartRateSamples(normalized);
+            nightSamples = await readSamples();
+          }
+        } catch (err) {
+          console.warn("[sync] HR samples fetch failed (continuing):", err instanceof Error ? err.message : err);
+        }
+      }
     }
 
-    // -----------------------------------------------------------------------
-    // Sleep analytics
-    // -----------------------------------------------------------------------
-    const analyticSessions = historicalSessions.map((s) => ({
-      sleepDate: s.sleepDate,
-      startTime: s.startTime,
-      endTime: s.endTime,
-      totalSleepMs: s.totalSleepMs,
-      efficiencyScore: s.efficiencyScore,
-      // Preserve startTime/endTime per stage so getLastNightDetail can build
-      // the chronological timeline without a second DB round-trip.
-      stages: s.stages.map((st) => ({
-        stageType: st.stageType,
-        startTime: st.startTime,
-        endTime: st.endTime,
-        durationMs: st.durationMs,
-      })),
-    }));
-
-    const latestSessionWithStages = analyticSessions[0];
-    const architecture = calculateSleepArchitecture(latestSessionWithStages.stages ?? []);
-    const variance = calculateCircadianVariance(analyticSessions);
-    const debt = calculateSleepDebt(analyticSessions, 8);
-    const lastNight = getLastNightDetail(analyticSessions);
-
-    const chartTimeline = [...analyticSessions]
-      .sort((a, b) => a.sleepDate.localeCompare(b.sleepDate))
-      .map((s) => {
-        const debtItem = debt.timeline.find((t) => t.date === s.sleepDate);
-        return {
-          date: s.sleepDate,
-          efficiency: Math.round(s.efficiencyScore * 100),
-          runningDebtHours: debtItem?.runningDebtHours ?? 0,
-        };
-      });
-
-    // -----------------------------------------------------------------------
-    // Heart analytics
-    // -----------------------------------------------------------------------
-    const heart = calculateHeartAnalytics(
+    return assembleDashboardData(
+      historicalSessions,
       historicalHeartRows.map((r) => ({
         date: r.date,
         restingHeartRate: r.restingHeartRate,
         hrvRmssd: r.hrvRmssd,
-      }))
+      })),
+      nightSamples
     );
-
-    return {
-      hasData: true as const,
-      latestSummary: latestSessionWithStages,
-      chartTimeline,
-      analytics: { architecture, variance, debt },
-      lastNight,
-      heart,
-    };
 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -1,7 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { SleepStageInterval } from "@/lib/analytics/sleep";
+import type { SleepStageInterval, SleepStageType } from "@/lib/analytics/sleep";
+import {
+  buildHypnogramLayout,
+  LANES,
+  type HypnogramSegment,
+} from "@/lib/charts/hypnogram-layout";
+import { formatClockTime, formatDurationMs } from "@/lib/format";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -30,25 +36,9 @@ const STAGE_COLORS: Record<string, string> = {
   awake: "#d97706", // amber-600   — soft amber gold
 };
 
-// ---------------------------------------------------------------------------
-// Lane layout — Fitbit ordering: Awake on top, Deep at the bottom
-// ---------------------------------------------------------------------------
-
-type StageType = SleepStageInterval["stageType"];
-
-const LANES: Array<{ stage: StageType; label: string }> = [
-  { stage: "awake", label: "Awake" },
-  { stage: "rem",   label: "REM" },
-  { stage: "light", label: "Light" },
-  { stage: "deep",  label: "Deep" },
-];
-
-const LANE_INDEX: Record<StageType, number> = {
-  awake: 0,
-  rem:   1,
-  light: 2,
-  deep:  3,
-};
+/** Deep blocks at/above the 30m anchor threshold get a contrasting highlight. */
+const CONSOLIDATED_DEEP_COLOR = "#0d9488"; // teal-600
+const CONSOLIDATED_DEEP_MIN_MS = 30 * 60000;
 
 // Vertical geometry (px). Each lane row = label line + segment track.
 const ROW_H   = 64; // total height of one lane row
@@ -57,30 +47,16 @@ const TRACK_Y = 42; // vertical center of the segment track within its row
 const SEG_H   = 14; // height of a stage segment pill
 const AXIS_H  = 30; // bottom strip for clock-time labels
 const CHART_H = ROW_H * LANES.length + AXIS_H;
+const SLIGHT_RX = 2.5; // corner radius for mid-night segments
 
 const laneCenter = (laneIdx: number) => laneIdx * ROW_H + TRACK_Y;
 
-// Segments narrower than this (% of session width) are clamped up so brief
-// interruptions stay visible as thin ticks instead of vanishing entirely.
-const MIN_SEG_PCT = 0.45;
-
-// ---------------------------------------------------------------------------
-// Formatting helpers
-// ---------------------------------------------------------------------------
-
-function formatClock(ts: number): string {
-  return new Date(ts).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function formatDuration(ms: number): string {
-  const totalMin = Math.round(ms / 60000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+function segmentFill(seg: HypnogramSegment): string {
+  const { interval } = seg;
+  if (interval.stageType === "deep" && interval.durationMs >= CONSOLIDATED_DEEP_MIN_MS) {
+    return CONSOLIDATED_DEEP_COLOR;
+  }
+  return STAGE_COLORS[interval.stageType];
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +66,7 @@ function formatDuration(ms: number): string {
 interface TooltipState {
   x: number; // px within chart container
   y: number; // px within chart container
-  stage: StageType;
+  stage: SleepStageType;
   rangeLabel: string;
   durationLabel: string;
 }
@@ -116,42 +92,18 @@ export default function HypnogramChart({
     );
   }
 
-  const startTs = new Date(sessionStart).getTime();
-  const endTs   = new Date(sessionEnd).getTime();
-  const spanMs  = Math.max(endTs - startTs, 1);
+  const layout = buildHypnogramLayout(timeline, sessionStart, sessionEnd);
 
-  const pct = (ts: number) => ((ts - startTs) / spanMs) * 100;
-
-  const intervals = [...timeline].sort(
-    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-  );
-
-  // Per-stage totals for the lane labels — "Awake · 1h 9m"
-  const stageTotals: Record<StageType, number> = { awake: 0, rem: 0, light: 0, deep: 0 };
-  for (const iv of intervals) stageTotals[iv.stageType] += iv.durationMs;
-
-  // X-axis ticks: session start + whole-hour marks + session end. Inner ticks
-  // near the edges are dropped so they don't collide with the boundary labels.
-  const spanHours = spanMs / 3_600_000;
-  const stepHours = Math.max(1, Math.ceil(spanHours / 4));
-  const innerTicks: number[] = [];
-  const cursor = new Date(startTs);
-  cursor.setMinutes(0, 0, 0);
-  cursor.setHours(cursor.getHours() + 1);
-  for (let t = cursor.getTime(); t < endTs; t += stepHours * 3_600_000) {
-    const p = pct(t);
-    if (p > 8 && p < 92) innerTicks.push(t);
-  }
-
-  function showTooltip(e: React.MouseEvent, iv: SleepStageInterval, laneIdx: number) {
+  function showTooltip(e: React.MouseEvent, seg: HypnogramSegment) {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const { interval } = seg;
     setTooltip({
       x: e.clientX - rect.left,
-      y: laneCenter(laneIdx) - SEG_H / 2,
-      stage: iv.stageType,
-      rangeLabel: `${formatClock(new Date(iv.startTime).getTime())} – ${formatClock(new Date(iv.endTime).getTime())}`,
-      durationLabel: formatDuration(iv.durationMs),
+      y: laneCenter(seg.laneIndex) - SEG_H / 2,
+      stage: interval.stageType,
+      rangeLabel: `${formatClockTime(interval.startTime)} – ${formatClockTime(interval.endTime)}`,
+      durationLabel: formatDurationMs(interval.durationMs),
     });
   }
 
@@ -183,8 +135,9 @@ export default function HypnogramChart({
       )}
 
       {/* ----------------------------------------------------------------- */}
-      {/* Chart — Fitbit-style lane timeline. SVG rects use percentage X     */}
-      {/* coordinates so the chart is fluid-width with no resize observer.   */}
+      {/* Chart — Fitbit-style lane timeline. All geometry comes from the    */}
+      {/* pure layout module; SVG x-coordinates are percentages so the chart */}
+      {/* is fluid-width with no resize observer.                            */}
       {/* ----------------------------------------------------------------- */}
       <div ref={containerRef} className="relative w-full" onMouseLeave={() => setTooltip(null)}>
         <svg width="100%" height={CHART_H} className="block select-none">
@@ -202,7 +155,7 @@ export default function HypnogramChart({
               >
                 {label}
                 <tspan fill="#848484" fontWeight={500}>
-                  {" · "}{formatDuration(stageTotals[stage])}
+                  {" · "}{formatDurationMs(layout.stageTotalsMs[stage])}
                 </tspan>
               </text>
               <line
@@ -218,23 +171,18 @@ export default function HypnogramChart({
           ))}
 
           {/* Dashed transition connectors — drawn under the segments */}
-          {intervals.map((iv, k) => {
-            const next = intervals[k + 1];
-            if (!next || next.stageType === iv.stageType) return null;
-            const x = `${pct(new Date(next.startTime).getTime())}%`;
-            return (
-              <line
-                key={`c-${k}`}
-                x1={x}
-                x2={x}
-                y1={laneCenter(LANE_INDEX[iv.stageType])}
-                y2={laneCenter(LANE_INDEX[next.stageType])}
-                stroke="#c9c5bc"
-                strokeWidth={1}
-                strokeDasharray="1.5 3.5"
-              />
-            );
-          })}
+          {layout.connectors.map((c, k) => (
+            <line
+              key={`c-${k}`}
+              x1={`${c.xPct}%`}
+              x2={`${c.xPct}%`}
+              y1={laneCenter(c.fromLane)}
+              y2={laneCenter(c.toLane)}
+              stroke="#c9c5bc"
+              strokeWidth={1}
+              strokeDasharray="1.5 3.5"
+            />
+          ))}
 
           {/* Stage segments — slight rounding through the night; the first and
               last segments get a fully rounded outer edge (sleep onset / wake)
@@ -242,44 +190,36 @@ export default function HypnogramChart({
               corners, so the boundary segments layer a full-pill rect under a
               slight-radius rect covering the inner half; group opacity keeps
               the hover state seamless across the overlap. */}
-          {intervals.map((iv, k) => {
-            const laneIdx = LANE_INDEX[iv.stageType];
-            const x = pct(new Date(iv.startTime).getTime());
-            const w = Math.min(
-              Math.max(pct(new Date(iv.endTime).getTime()) - x, MIN_SEG_PCT),
-              100 - x
-            );
-            const isFirst = k === 0;
-            const isLast = k === intervals.length - 1;
-
+          {layout.segments.map((seg, k) => {
+            const { xPct: x, widthPct: w, roundLeft, roundRight } = seg;
             const common = {
-              y: laneCenter(laneIdx) - SEG_H / 2,
+              y: laneCenter(seg.laneIndex) - SEG_H / 2,
               height: SEG_H,
-              fill: STAGE_COLORS[iv.stageType],
+              fill: segmentFill(seg),
             };
 
             const shape =
-              isFirst && isLast ? (
+              roundLeft && roundRight ? (
                 <rect x={`${x}%`} width={`${w}%`} rx={SEG_H / 2} {...common} />
-              ) : isFirst ? (
+              ) : roundLeft ? (
                 <>
                   <rect x={`${x}%`} width={`${w}%`} rx={SEG_H / 2} {...common} />
-                  <rect x={`${x + w / 2}%`} width={`${w / 2}%`} rx={2.5} {...common} />
+                  <rect x={`${x + w / 2}%`} width={`${w / 2}%`} rx={SLIGHT_RX} {...common} />
                 </>
-              ) : isLast ? (
+              ) : roundRight ? (
                 <>
                   <rect x={`${x}%`} width={`${w}%`} rx={SEG_H / 2} {...common} />
-                  <rect x={`${x}%`} width={`${w / 2}%`} rx={2.5} {...common} />
+                  <rect x={`${x}%`} width={`${w / 2}%`} rx={SLIGHT_RX} {...common} />
                 </>
               ) : (
-                <rect x={`${x}%`} width={`${w}%`} rx={2.5} {...common} />
+                <rect x={`${x}%`} width={`${w}%`} rx={SLIGHT_RX} {...common} />
               );
 
             return (
               <g
                 key={`s-${k}`}
                 className="cursor-pointer transition-opacity hover:opacity-80"
-                onMouseEnter={(e) => showTooltip(e, iv, laneIdx)}
+                onMouseEnter={(e) => showTooltip(e, seg)}
                 onMouseLeave={() => setTooltip(null)}
               >
                 {shape}
@@ -288,39 +228,19 @@ export default function HypnogramChart({
           })}
 
           {/* Time axis */}
-          <text
-            x="0"
-            y={ROW_H * LANES.length + 18}
-            fontSize={11}
-            fill="#848484"
-            fontFamily="var(--font-sans)"
-            textAnchor="start"
-          >
-            {formatClock(startTs)}
-          </text>
-          {innerTicks.map((t) => (
+          {layout.ticks.map((tick) => (
             <text
-              key={t}
-              x={`${pct(t)}%`}
+              key={tick.timestamp}
+              x={`${tick.xPct}%`}
               y={ROW_H * LANES.length + 18}
               fontSize={11}
               fill="#848484"
               fontFamily="var(--font-sans)"
-              textAnchor="middle"
+              textAnchor={tick.anchor}
             >
-              {formatClock(t)}
+              {formatClockTime(tick.timestamp)}
             </text>
           ))}
-          <text
-            x="100%"
-            y={ROW_H * LANES.length + 18}
-            fontSize={11}
-            fill="#848484"
-            fontFamily="var(--font-sans)"
-            textAnchor="end"
-          >
-            {formatClock(endTs)}
-          </text>
         </svg>
 
         {/* Hover tooltip */}

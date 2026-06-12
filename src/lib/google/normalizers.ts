@@ -210,3 +210,48 @@ export function normalizeHeartData(
       hrvRmssd: v.hrvRmssd,
     }));
 }
+
+// ---------------------------------------------------------------------------
+// Intra-day heart rate sample normalizer
+// ---------------------------------------------------------------------------
+
+/** One raw point from the `heart-rate` (sample) data type. */
+export interface GoogleHealthHeartRateSamplePoint {
+  heartRate?: {
+    sampleTime?: { physicalTime?: string };
+    /** Returned as a string (int64 in the API spec). */
+    beatsPerMinute?: string;
+  };
+}
+
+export interface NormalizedHeartRateSample {
+  userId: string;
+  timestamp: Date;
+  bpm: number;
+}
+
+/**
+ * Converts raw `heart-rate` sample points into rows for `heart_rate_samples`.
+ * Drops points missing a physicalTime or with implausible bpm values, and
+ * sorts ascending by timestamp.
+ */
+export function normalizeHeartRateSamples(
+  userId: string,
+  points: GoogleHealthHeartRateSamplePoint[]
+): NormalizedHeartRateSample[] {
+  const samples: NormalizedHeartRateSample[] = [];
+
+  for (const point of points) {
+    const iso = point.heartRate?.sampleTime?.physicalTime;
+    if (!iso) continue;
+    const timestamp = new Date(iso);
+    if (isNaN(timestamp.getTime())) continue;
+
+    const bpm = parseInt(String(point.heartRate?.beatsPerMinute ?? ""), 10);
+    if (isNaN(bpm) || bpm < 20 || bpm > 300) continue;
+
+    samples.push({ userId, timestamp, bpm });
+  }
+
+  return samples.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+}

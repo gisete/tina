@@ -13,7 +13,11 @@
       "Bash(node:*)",
       "Bash(npx tsc:*)",
       "Bash(npm run *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(gh repo *)",
+      "Bash(brew install *)",
+      "WebFetch(domain:developers.google.com)"
     ]
   }
 }
