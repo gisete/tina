@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { auth } from "@/auth";
-import { syncAndFetchSleepAnalytics } from "@/app/actions/sync";
+import { loadPageData } from "@/app/actions/sync";
+import SyncButton from "./components/sync-button";
 
 function formatSleepMs(ms: number): string {
   const hours = Math.floor(ms / 3_600_000);
@@ -13,9 +14,8 @@ function formatSleepMs(ms: number): string {
 }
 
 function debtBadge(severity: string): string {
-  if (severity === "Severe")   return "bg-red-100 text-red-700";
-  if (severity === "Moderate") return "bg-amber-100 text-amber-700";
-  if (severity === "Mild")     return "bg-yellow-50 text-yellow-700";
+  if (severity === "high")     return "bg-red-100 text-red-700";
+  if (severity === "moderate") return "bg-amber-100 text-amber-700";
   return "bg-surface-container text-on-surface-variant";
 }
 
@@ -29,16 +29,16 @@ export default async function DashboardOverviewPage() {
   // The layout redirects unauthenticated users, but layouts and pages can
   // begin rendering concurrently in the App Router. Checking the session here
   // (auth() is request-cached by Auth.js, so this is free) prevents
-  // syncAndFetchSleepAnalytics from firing — and logging a noisy Unauthorized
-  // error — during the brief window before the layout's redirect resolves.
+  // loadPageData from firing — and logging a noisy Unauthorized error —
+  // during the brief window before the layout's redirect resolves.
   const session = await auth();
   if (!session?.user?.id) return null;
 
-  let data: Awaited<ReturnType<typeof syncAndFetchSleepAnalytics>> | undefined;
+  let data: Awaited<ReturnType<typeof loadPageData>> | undefined;
   try {
-    data = await syncAndFetchSleepAnalytics(30);
+    data = await loadPageData();
   } catch (error) {
-    console.error("Overview sync error:", error);
+    console.error("Overview page error:", error);
   }
 
   const hasData = data?.hasData === true;
@@ -62,11 +62,14 @@ export default async function DashboardOverviewPage() {
     <div className="p-margin-mobile md:p-margin-desktop max-w-7xl mx-auto py-10 pb-24">
 
       {/* Page Headline */}
-      <div className="mb-8">
-        <h1 className="font-display text-4xl font-bold text-on-surface tracking-tight mb-2">Overview</h1>
-        <p className="font-sans text-base text-on-surface-variant max-w-2xl">
-          Your personal health intelligence hub. Select a module to explore your data.
-        </p>
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-4xl font-bold text-on-surface tracking-tight mb-2">Overview</h1>
+          <p className="font-sans text-base text-on-surface-variant max-w-2xl">
+            Your personal health intelligence hub. Select a module to explore your data.
+          </p>
+        </div>
+        <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
       </div>
 
       {/* Bento Grid */}

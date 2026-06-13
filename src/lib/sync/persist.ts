@@ -8,7 +8,7 @@ import type {
   NormalizedHeartRecord,
   NormalizedHeartRateSample,
 } from "@/lib/google/normalizers";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export type NormalizedSleepSession = NonNullable<ReturnType<typeof normalizeGoogleSleepSession>>;
 
@@ -25,26 +25,56 @@ export async function persistHealthRecords(
 ): Promise<void> {
   await db.transaction(async (tx) => {
 
+    let inserted = 0;
+    let refreshed = 0;
     for (const { session: sleepSession, stages } of normalizedSleep) {
-      const existing = await tx
-        .select({ id: sleepSessions.id })
-        .from(sleepSessions)
-        .where(and(
-          eq(sleepSessions.userId, userId),
-          eq(sleepSessions.sleepDate, sleepSession.sleepDate),
-        ))
-        .limit(1);
+      // Upsert on (userId, startTime) — the physical start of the session is
+      // its identity. On conflict we refresh mutable fields and replace stages.
+      const [upserted] = await tx
+        .insert(sleepSessions)
+        .values(sleepSession)
+        .onConflictDoUpdate({
+          target: [sleepSessions.userId, sleepSessions.startTime],
+          set: {
+            // sleepDate is included so a re-sync after the nightOf() fix
+            // corrects any rows that were keyed to the wrong UTC calendar date.
+            sleepDate: sql`EXCLUDED.sleep_date`,
+            endTime: sql`EXCLUDED.end_time`,
+            totalSleepMs: sql`EXCLUDED.total_sleep_ms`,
+            efficiencyScore: sql`EXCLUDED.efficiency_score`,
+            timelineRaw: sql`EXCLUDED.timeline_raw`,
+            source: sql`EXCLUDED.source`,
+          },
+        })
+        .returning({ id: sleepSessions.id });
 
-      if (existing.length === 0) {
-        await tx.insert(sleepSessions).values(sleepSession);
+      const isRefresh = upserted.id !== sleepSession.id;
+
+      if (process.env.SYNC_DEBUG === "1") {
+        console.log(
+          `[sync:debug] persist    sleepDate=${sleepSession.sleepDate}  startTime=${sleepSession.startTime.toISOString()}  → ${isRefresh ? "refreshed" : "inserted"}`
+        );
+      }
+
+      if (isRefresh) {
+        // Replace stage rows: delete the old set and insert the fresh one under
+        // the existing session ID (not the freshly generated one in the stages).
+        await tx.delete(sleepStages).where(eq(sleepStages.sessionId, upserted.id));
+        if (stages.length > 0) {
+          await tx.insert(sleepStages).values(
+            stages.map((s) => ({ ...s, id: crypto.randomUUID(), sessionId: upserted.id }))
+          );
+        }
+        refreshed++;
+      } else {
         if (stages.length > 0) {
           await tx.insert(sleepStages).values(stages);
         }
-        console.log(`[sync] Inserted sleep session for ${sleepSession.sleepDate}`);
-      } else {
-        console.log(`[sync] Skipped duplicate sleep for ${sleepSession.sleepDate}`);
+        inserted++;
       }
     }
+
+    console.log(`[sync] Sessions: ${inserted} inserted, ${refreshed} refreshed`);
 
     if (heartRecords.length > 0) {
       await tx

@@ -1,5 +1,6 @@
 import { db } from "@/db/client";
 import { accounts } from "@/db/schema";
+import { addDays } from "@/lib/dates";
 import { eq, and } from "drizzle-orm";
 import type {
   GoogleHealthSessionBlock,
@@ -162,7 +163,9 @@ export async function fetchGoogleSleepData(
  * Fetches daily resting heart rate and HRV RMSSD streams in parallel using
  * the correct Health Connect v4 kebab-case data type identifiers and the
  * `:reconcile` endpoint variant required for daily telemetry aggregates.
- * Daily data types filter on `{type}.date` civil dates.
+ * Daily data types filter on `{type}.date` civil dates, which only support
+ * the `>=` and `<` comparators — so the window end is expressed as an
+ * exclusive upper bound one civil day after `endTimeISO`.
  */
 export async function fetchGoogleHeartData(
   userId: string,
@@ -170,16 +173,18 @@ export async function fetchGoogleHeartData(
   endTimeISO: string
 ): Promise<{ heartRatePoints: GoogleHealthHeartRateDataPoint[]; hrvPoints: GoogleHealthHrvDataPoint[] }> {
   const from = civilDate(startTimeISO);
-  const to = civilDate(endTimeISO);
+  // `<=` is rejected by the daily date filters with a 400; use `< (end + 1 day)`.
+  // The +1 is computed on the civil-date string via addDays (never toISOString).
+  const toExclusive = addDays(civilDate(endTimeISO), 1);
 
   const [heartRatePoints, hrvPoints] = await Promise.all([
     fetchHealthDataType(userId, "daily-resting-heart-rate", {
       reconcile: true,
-      filter: `daily_resting_heart_rate.date >= "${from}" AND daily_resting_heart_rate.date <= "${to}"`,
+      filter: `daily_resting_heart_rate.date >= "${from}" AND daily_resting_heart_rate.date < "${toExclusive}"`,
     }),
     fetchHealthDataType(userId, "daily-heart-rate-variability", {
       reconcile: true,
-      filter: `daily_heart_rate_variability.date >= "${from}" AND daily_heart_rate_variability.date <= "${to}"`,
+      filter: `daily_heart_rate_variability.date >= "${from}" AND daily_heart_rate_variability.date < "${toExclusive}"`,
     }),
   ]);
 

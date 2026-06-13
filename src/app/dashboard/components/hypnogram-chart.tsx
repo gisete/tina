@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { SleepStageInterval, SleepStageType } from "@/lib/analytics/sleep";
+import type { RestlessEvent, SleepStageInterval } from "@/lib/analytics/sleep";
 import {
   buildHypnogramLayout,
   LANES,
+  LANE_INDEX,
   type HypnogramSegment,
+  type RestlessMarker,
 } from "@/lib/charts/hypnogram-layout";
 import { formatClockTime, formatDurationMs } from "@/lib/format";
 
@@ -18,6 +20,10 @@ interface HypnogramChartProps {
   timeline: SleepStageInterval[];
   sessionStart: string; // ISO 8601
   sessionEnd: string;   // ISO 8601
+  /** Pre-computed restless stirs from assemble.ts (HR-derived or empty). */
+  restlessEvents?: RestlessEvent[];
+  /** How the restless events were detected — drives label and tooltip copy. */
+  restlessnessSource?: "none" | "hr-estimated";
   /**
    * When true the component renders without its outer card wrapper and internal
    * header row so a parent container can provide its own card shell and title.
@@ -39,6 +45,10 @@ const STAGE_COLORS: Record<string, string> = {
 /** Deep blocks at/above the 30m anchor threshold get a contrasting highlight. */
 const CONSOLIDATED_DEEP_COLOR = "#0d9488"; // teal-600
 const CONSOLIDATED_DEEP_MIN_MS = 30 * 60000;
+
+/** Brief mid-night stirs are flagged with a rose diamond on the Awake lane. */
+const RESTLESS_COLOR = "#f43f5e"; // rose-500
+const RESTLESS_D = 11; // diamond bounding size, px
 
 // Vertical geometry (px). Each lane row = label line + segment track.
 const ROW_H   = 64; // total height of one lane row
@@ -66,7 +76,8 @@ function segmentFill(seg: HypnogramSegment): string {
 interface TooltipState {
   x: number; // px within chart container
   y: number; // px within chart container
-  stage: SleepStageType;
+  title: string;      // "Deep", "Restless", … (capitalized on render)
+  titleColor: string;
   rangeLabel: string;
   durationLabel: string;
 }
@@ -79,6 +90,8 @@ export default function HypnogramChart({
   timeline,
   sessionStart,
   sessionEnd,
+  restlessEvents = [],
+  restlessnessSource = "none",
   bare = false,
 }: HypnogramChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -92,7 +105,7 @@ export default function HypnogramChart({
     );
   }
 
-  const layout = buildHypnogramLayout(timeline, sessionStart, sessionEnd);
+  const layout = buildHypnogramLayout(timeline, sessionStart, sessionEnd, restlessEvents);
 
   function showTooltip(e: React.MouseEvent, seg: HypnogramSegment) {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -101,9 +114,23 @@ export default function HypnogramChart({
     setTooltip({
       x: e.clientX - rect.left,
       y: laneCenter(seg.laneIndex) - SEG_H / 2,
-      stage: interval.stageType,
+      title: interval.stageType,
+      titleColor: STAGE_COLORS[interval.stageType],
       rangeLabel: `${formatClockTime(interval.startTime)} – ${formatClockTime(interval.endTime)}`,
       durationLabel: formatDurationMs(interval.durationMs),
+    });
+  }
+
+  function showRestlessTooltip(e: React.MouseEvent, m: RestlessMarker) {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setTooltip({
+      x: e.clientX - rect.left,
+      y: laneCenter(LANE_INDEX.awake) - SEG_H / 2,
+      title: restlessnessSource === "hr-estimated" ? "Restless (est.)" : "Restless",
+      titleColor: RESTLESS_COLOR,
+      rangeLabel: formatClockTime(m.startTimestamp),
+      durationLabel: formatDurationMs(m.durationMs),
     });
   }
 
@@ -157,6 +184,11 @@ export default function HypnogramChart({
                 <tspan fill="#848484" fontWeight={500}>
                   {" · "}{formatDurationMs(layout.stageTotalsMs[stage])}
                 </tspan>
+                {stage === "awake" && layout.restlessMarkers.length > 0 && (
+                  <tspan fill={RESTLESS_COLOR} fontWeight={600}>
+                    {" · "}{restlessnessSource === "hr-estimated" ? "~" : ""}{layout.restlessMarkers.length} restless
+                  </tspan>
+                )}
               </text>
               <line
                 x1="0%"
@@ -227,6 +259,31 @@ export default function HypnogramChart({
             );
           })}
 
+          {/* Restless markers — brief (<5m) mid-night stirs, as rose diamonds
+              centered on the Awake lane. The wrapping g shifts left by half the
+              diamond so the x-percentage lands on its center; the rect rotates
+              45° around its own box center (transform-box: fill-box). */}
+          {layout.restlessMarkers.map((m, k) => (
+            <g
+              key={`r-${k}`}
+              transform={`translate(${-RESTLESS_D / 2}, 0)`}
+              className="cursor-pointer"
+              onMouseEnter={(e) => showRestlessTooltip(e, m)}
+              onMouseLeave={() => setTooltip(null)}
+            >
+              <rect
+                x={`${m.xPct}%`}
+                y={laneCenter(LANE_INDEX.awake) - RESTLESS_D / 2}
+                width={RESTLESS_D}
+                height={RESTLESS_D}
+                fill={RESTLESS_COLOR}
+                stroke="#ffffff"
+                strokeWidth={1.5}
+                style={{ transformBox: "fill-box", transformOrigin: "center", transform: "rotate(45deg)" }}
+              />
+            </g>
+          ))}
+
           {/* Time axis */}
           {layout.ticks.map((tick) => (
             <text
@@ -265,7 +322,7 @@ export default function HypnogramChart({
           >
             <p
               style={{
-                color: STAGE_COLORS[tooltip.stage],
+                color: tooltip.titleColor,
                 fontWeight: 700,
                 fontFamily: "var(--font-display)",
                 margin: 0,
@@ -274,7 +331,7 @@ export default function HypnogramChart({
                 letterSpacing: "0.01em",
               }}
             >
-              {tooltip.stage}
+              {tooltip.title}
               <span style={{ color: "#a8a496", fontWeight: 500, marginLeft: 6 }}>
                 {tooltip.durationLabel}
               </span>

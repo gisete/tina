@@ -8,6 +8,7 @@ import {
   type LightSleepStability,
 } from "./continuity";
 import { calculateHolisticSleepScore } from "./score";
+import { calculateRestlessness, type RestlessnessAnalysis } from "./restlessness";
 
 /** Output of {@link getLastNightDetail} — all primitives, ready for serialisation. */
 export interface LastNightDetail {
@@ -47,6 +48,8 @@ export interface LastNightDetail {
   remContinuity: RemSleepContinuity;
   /** Light-sleep proportion and awakening-transition metrics. */
   lightStability: LightSleepStability;
+  /** Brief mid-night stirs (<5m) vs true awakenings, with a disruption index. */
+  restlessness: RestlessnessAnalysis;
 }
 
 type RawStageInput = {
@@ -115,8 +118,9 @@ export function getLastNightDetail(
       durationMs: s.durationMs,
     }));
 
-  const continuity = calculateDeepSleepContinuity(timeline);
-  const timeInBedMs =
+  const continuity   = calculateDeepSleepContinuity(timeline);
+  const restlessness = calculateRestlessness(timeline);
+  const timeInBedMs  =
     new Date(toIso(latest.endTime)).getTime() - new Date(toIso(latest.startTime)).getTime();
 
   return {
@@ -128,12 +132,15 @@ export function getLastNightDetail(
     holisticScore: calculateHolisticSleepScore(
       latest.totalSleepMs,
       timeInBedMs,
-      continuity.continuityScore
+      continuity.continuityScore,
+      restlessness.disruptionIndex,
+      null // cardiac: assemble.ts recomputes with full intra-night HR data
     ),
     breakdown,
     timeline,
     continuity,
     remContinuity: calculateRemSleepContinuity(timeline),
     lightStability: calculateLightSleepStability(timeline, latest.totalSleepMs),
+    restlessness,
   };
 }

@@ -24,8 +24,11 @@ export interface NightHeartLayout {
   ticks: TimeTick[];
   /** Dashed marker at the usual resting heart rate, when one is known. */
   baseline: { bpm: number; yFrac: number } | null;
-  /** Distinct dips of the curve below the baseline (entries from above). */
-  dipsBelowBaseline: number;
+  /**
+   * Percentage (0-100) of all night samples at or below the baseline RHR.
+   * 0 when baseline is null. Used for the chart's summary copy.
+   */
+  timeBelowBaselinePct: number;
   minBpm: number;
   maxBpm: number;
 }
@@ -73,18 +76,14 @@ export function buildNightHeartLayout(
     yTicks.push({ bpm, yFrac: yFrac(bpm) });
   }
 
-  // Count distinct excursions below the usual resting rate.
-  let dipsBelowBaseline = 0;
-  if (baselineRhr !== null) {
-    let below = false;
-    for (const s of sorted) {
-      if (s.bpm < baselineRhr && !below) {
-        dipsBelowBaseline++;
-        below = true;
-      } else if (s.bpm >= baselineRhr) {
-        below = false;
-      }
-    }
+  // Fraction of samples at or below the usual resting rate.
+  // Uses raw (non-downsampled) counts — noise averages out over thousands of
+  // samples and the result is display-only (the scoring engine uses filtered
+  // asleep-minute bins via calculateCardiacStrain).
+  let timeBelowBaselinePct = 0;
+  if (baselineRhr !== null && sorted.length > 0) {
+    const belowCount = sorted.filter((s) => s.bpm <= baselineRhr).length;
+    timeBelowBaselinePct = Math.round((belowCount / sorted.length) * 100);
   }
 
   return {
@@ -92,7 +91,7 @@ export function buildNightHeartLayout(
     yTicks,
     ticks: buildTimeTicks(startTs, endTs),
     baseline: baselineRhr !== null ? { bpm: baselineRhr, yFrac: yFrac(baselineRhr) } : null,
-    dipsBelowBaseline,
+    timeBelowBaselinePct,
     minBpm,
     maxBpm,
   };

@@ -1,7 +1,8 @@
 "use server";
 
 import { auth } from "@/auth";
-import { syncAndFetchSleepAnalytics } from "@/app/actions/sync";
+import { loadPageData } from "@/app/actions/sync";
+import SyncButton from "../components/sync-button";
 import HeartCharts from "../components/heart-charts";
 import DateNavigator from "../components/date-navigator";
 import { localToday } from "@/lib/dates";
@@ -23,11 +24,11 @@ export default async function HeartPage({
   const params = await searchParams;
   const targetDate = params.date || localToday();
 
-  let data: Awaited<ReturnType<typeof syncAndFetchSleepAnalytics>> | undefined;
+  let data: Awaited<ReturnType<typeof loadPageData>> | undefined;
   try {
-    data = await syncAndFetchSleepAnalytics(30, targetDate);
+    data = await loadPageData(targetDate);
   } catch (error) {
-    console.error("Heart page sync error:", error);
+    console.error("Heart page error:", error);
   }
 
   const hasData    = data?.hasData === true;
@@ -58,7 +59,10 @@ export default async function HeartPage({
             Monitor resting heart rate and HRV trends to gauge cardiovascular fitness and daily autonomic recovery load.
           </p>
         </div>
-        <DateNavigator />
+        <div className="flex items-center gap-3">
+          <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
+          <DateNavigator />
+        </div>
       </div>
 
       {!hasHeartData ? (

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, real, date, pgEnum, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, real, date, pgEnum, uniqueIndex, index, jsonb } from "drizzle-orm/pg-core";
 import { primaryKey } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
@@ -27,7 +27,8 @@ export const sleepSessions = pgTable("sleep_sessions", {
   source: text("source").default("google_health").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
-  uniqueIndex("sleep_sessions_user_id_date_idx").on(t.userId, t.sleepDate),
+  uniqueIndex("sleep_sessions_user_id_start_time_idx").on(t.userId, t.startTime),
+  index("sleep_sessions_user_id_sleep_date_idx").on(t.userId, t.sleepDate),
 ]);
 
 export const sleepStages = pgTable("sleep_stages", {
@@ -85,6 +86,16 @@ export const sleepSessionsRelations = relations(sleepSessions, ({ one, many }) =
 
 export const sleepStagesRelations = relations(sleepStages, ({ one }) => ({
   session: one(sleepSessions, { fields: [sleepStages.sessionId], references: [sleepSessions.id] }),
+}));
+
+/** Records the last successful Google Health sync timestamp per user. */
+export const syncState = pgTable("sync_state", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  lastSyncedAt: timestamp("last_synced_at").notNull(),
+});
+
+export const syncStateRelations = relations(syncState, ({ one }) => ({
+  user: one(users, { fields: [syncState.userId], references: [users.id] }),
 }));
 
 export const accounts = pgTable(

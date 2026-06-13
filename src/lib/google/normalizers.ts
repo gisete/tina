@@ -50,15 +50,24 @@ export interface NormalizedHeartRecord {
 export interface GoogleHealthStageBlock {
   startTime: string;
   endTime: string;
-  type: "LIGHT" | "DEEP" | "REM" | "AWAKE";
+  /**
+   * Known values: LIGHT | DEEP | REM | AWAKE — but the REST docs hedge with
+   * "etc." and classic (non-stages) logs may use other levels, so this is
+   * typed open and unmapped values are surfaced via warnings.
+   */
+  type: string;
 }
 
 export interface GoogleHealthSessionBlock {
   name: string;
   sleep?: {
+    /** SleepType — expected "STAGES" or "CLASSIC". */
+    type?: string;
     interval: {
       startTime: string;
       endTime: string;
+      /** UTC offset of the user's local timezone at session start, e.g. "3600s" or "-18000s". */
+      startUtcOffset?: string;
     };
     stages?: GoogleHealthStageBlock[];
     summary?: {
@@ -67,6 +76,63 @@ export interface GoogleHealthSessionBlock {
       minutesAwake: string;
     };
   };
+}
+
+// ---------------------------------------------------------------------------
+// Sleep date helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Sessions starting before this local hour (6 pm) are early-morning arrivals
+ * — the user stayed up past midnight from the previous evening. The calendar
+ * date of the night is therefore the day before the UTC start date.
+ */
+const NIGHT_BOUNDARY_HOUR = 18;
+
+/**
+ * Returns the "night-of" local calendar date for a sleep session.
+ *
+ * A session that begins at 01:06 local time belongs to the night that started
+ * the previous evening, not to the early-morning calendar day. We apply the
+ * UTC offset to convert the UTC start time to local wall-clock time, then
+ * subtract one day when the local hour is before NIGHT_BOUNDARY_HOUR.
+ *
+ * All arithmetic uses UTC methods on offset-shifted Dates — never toISOString
+ * or the Date("YYYY-MM-DD") constructor — to avoid timezone-dependent slippage.
+ */
+export function nightOf(utcMs: number, offsetSeconds: number): string {
+  // Shift the timestamp so that UTC methods read local wall-clock values.
+  const d = new Date(utcMs + offsetSeconds * 1000);
+  let year = d.getUTCFullYear();
+  let month = d.getUTCMonth() + 1;
+  let day = d.getUTCDate();
+
+  if (d.getUTCHours() < NIGHT_BOUNDARY_HOUR) {
+    // Step back one calendar day using Date.UTC to handle month/year rollovers.
+    const prev = new Date(Date.UTC(year, month - 1, day - 1));
+    year  = prev.getUTCFullYear();
+    month = prev.getUTCMonth() + 1;
+    day   = prev.getUTCDate();
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** Stage values we map 1:1 into the sleep_stages enum. */
+const KNOWN_STAGE_TYPES = new Set(["deep", "light", "rem", "awake"]);
+
+/**
+ * Batch entry point: normalizes every session block, dropping any that lack a
+ * usable interval. Unknown stage values still surface a per-session warning
+ * from {@link normalizeGoogleSleepSession} before falling back to "light".
+ */
+export function normalizeGoogleSleepSessions(
+  userId: string,
+  blocks: GoogleHealthSessionBlock[]
+): Array<NonNullable<ReturnType<typeof normalizeGoogleSleepSession>>> {
+  return blocks
+    .map((block) => normalizeGoogleSleepSession(userId, block))
+    .filter((n): n is NonNullable<typeof n> => n !== null);
 }
 
 export function normalizeGoogleSleepSession(userId: string, sessionBlock: GoogleHealthSessionBlock) {
@@ -82,8 +148,14 @@ export function normalizeGoogleSleepSession(userId: string, sessionBlock: Google
   const totalSleepMs = minutesAsleep * 60 * 1000;
   const efficiencyScore = minutesInPeriod > 0 ? minutesAsleep / minutesInPeriod : 0;
 
-  // Use the start date string as our calendar tracking key (YYYY-MM-DD)
-  const sleepDate = sleepData.interval.startTime.split("T")[0];
+  // Derive sleepDate from the user's local wall-clock time, not the UTC date.
+  // interval.startUtcOffset (e.g. "3600s") converts the UTC timestamp to the
+  // user's local timezone; sessions starting before NIGHT_BOUNDARY_HOUR local
+  // (e.g. 01:06) belong to the prior evening's night, not the early-morning day.
+  const offsetSeconds = sleepData.interval.startUtcOffset
+    ? parseInt(sleepData.interval.startUtcOffset, 10)
+    : 0;
+  const sleepDate = nightOf(startTime.getTime(), offsetSeconds);
   const sessionId = crypto.randomUUID();
 
   const session = {
@@ -97,16 +169,23 @@ export function normalizeGoogleSleepSession(userId: string, sessionBlock: Google
     source: "google_health",
   };
 
+  const unmappedTypes = new Map<string, number>();
+
   const stages = (sleepData.stages || []).map((stage) => {
     const sTime = new Date(stage.startTime);
     const eTime = new Date(stage.endTime);
     const durationMs = eTime.getTime() - sTime.getTime();
 
-    const rawType = stage.type?.toLowerCase() || "light";
-    let stageType: "deep" | "light" | "rem" | "awake" = "light";
-    if (rawType === "deep") stageType = "deep";
-    if (rawType === "rem") stageType = "rem";
-    if (rawType === "awake") stageType = "awake";
+    const rawType = stage.type?.toLowerCase() ?? "";
+    let stageType: "deep" | "light" | "rem" | "awake";
+    if (KNOWN_STAGE_TYPES.has(rawType)) {
+      stageType = rawType as "deep" | "light" | "rem" | "awake";
+    } else {
+      // Unknown stage value — surface it instead of silently absorbing it,
+      // then fall back to "light" so the sync still completes.
+      unmappedTypes.set(stage.type, (unmappedTypes.get(stage.type) ?? 0) + 1);
+      stageType = "light";
+    }
 
     return {
       id: crypto.randomUUID(),
@@ -117,6 +196,12 @@ export function normalizeGoogleSleepSession(userId: string, sessionBlock: Google
       durationMs,
     };
   });
+
+  for (const [rawValue, count] of unmappedTypes) {
+    console.warn(
+      `[normalizer] Unmapped sleep stage type ${JSON.stringify(rawValue)} × ${count} in session ${sleepDate} — classified as "light"`
+    );
+  }
 
   return { session, stages };
 }
@@ -160,15 +245,6 @@ export function normalizeHeartData(
   heartRatePoints: GoogleHealthHeartRateDataPoint[],
   hrvPoints: GoogleHealthHrvDataPoint[]
 ): NormalizedHeartRecord[] {
-  if (heartRatePoints.length > 0) {
-    console.log("[normalizer] daily-resting-heart-rate sample point:");
-    console.log(JSON.stringify(heartRatePoints[0], null, 2));
-  }
-  if (hrvPoints.length > 0) {
-    console.log("[normalizer] daily-heart-rate-variability sample point:");
-    console.log(JSON.stringify(hrvPoints[0], null, 2));
-  }
-
   const byDate: Record<string, { restingHeartRate: number | null; hrvRmssd: number | null }> = {};
 
   for (const item of heartRatePoints) {

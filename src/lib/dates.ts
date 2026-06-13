@@ -27,3 +27,16 @@ export function addDays(dateStr: string, offsetDays: number): string {
   d.setDate(d.getDate() + offsetDays);
   return formatLocalDate(d);
 }
+
+/**
+ * Returns "YYYY-MM-DD" for the Monday that starts the ISO week containing
+ * the given date (defaults to today). Uses local midnight arithmetic — never
+ * UTC — so the result matches the user's wall-clock calendar week.
+ */
+export function startOfWeek(dateStr?: string): string {
+  const d = dateStr ? parseLocalDate(dateStr) : new Date();
+  // getDay() → 0 (Sun) … 6 (Sat). Monday is day 1, so offset = (day + 6) % 7.
+  const daysFromMonday = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - daysFromMonday);
+  return formatLocalDate(d);
+}

@@ -189,12 +189,12 @@ export default function NightHeartChart({
         ))}
       </div>
 
-      {/* dip summary */}
+      {/* baseline summary */}
       {layout.baseline && (
         <p className="text-xs text-on-surface-variant mt-3 pt-3 border-t border-outline-variant/50">
           Range {layout.minBpm}–{layout.maxBpm} bpm.{" "}
-          {layout.dipsBelowBaseline > 0
-            ? <>Dropped below your usual resting rate <strong className="text-on-surface">{layout.dipsBelowBaseline} time{layout.dipsBelowBaseline === 1 ? "" : "s"}</strong> — deep, restorative stretches.</>
+          {layout.timeBelowBaselinePct > 0
+            ? <>Spent <strong className="text-on-surface">{layout.timeBelowBaselinePct}%</strong> of the night below your usual resting rate.</>
             : <>Stayed above your usual resting rate all night.</>}
         </p>
       )}
