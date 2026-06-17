@@ -15,3 +15,4 @@ export * from "./hr-restlessness";
 export * from "./cardiac-strain";
 export * from "./utils";
 export * from "./sessions";
+export * from "./stage-hr";

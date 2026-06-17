@@ -32,15 +32,10 @@ interface HypnogramChartProps {
 }
 
 // ---------------------------------------------------------------------------
-// Stage colour palette (Fitbit-inspired)
+// Stage colour palette — single source of truth lives in stage-colors.ts
 // ---------------------------------------------------------------------------
 
-const STAGE_COLORS: Record<string, string> = {
-  deep:  "#1e1b4b", // indigo-950  — deep midnight navy
-  light: "#6366f1", // indigo-500  — periwinkle
-  rem:   "#8b5cf6", // violet-500  — lavender purple
-  awake: "#d97706", // amber-600   — soft amber gold
-};
+import { STAGE_COLORS } from "@/lib/charts/stage-colors";
 
 /** Deep blocks at/above the 30m anchor threshold get a contrasting highlight. */
 const CONSOLIDATED_DEEP_COLOR = "#0d9488"; // teal-600

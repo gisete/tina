@@ -21,3 +21,12 @@ export function formatDurationMins(mins: number): string {
 export function formatDurationMs(ms: number): string {
   return formatDurationMins(Math.round(ms / 60000));
 }
+
+/**
+ * "YYYY-MM-DD" → "MM/DD"
+ * Slices the string directly — never constructs a Date object so there is no
+ * UTC-midnight shift of the calendar day.
+ */
+export function formatDateMMDD(dateStr: string): string {
+  return `${dateStr.slice(5, 7)}/${dateStr.slice(8, 10)}`;
+}

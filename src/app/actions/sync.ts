@@ -132,13 +132,14 @@ export async function readDashboardData(targetDate?: string) {
       orderBy: [desc(heartRateSummaries.date)],
       limit: 45,
     }),
-    // When browsing a past date, fetch the truly-latest sessions so
-    // currentState.debt and currentState.variance always reflect today.
+    // When browsing a past date, fetch the truly-latest sessions (with stages)
+    // so currentState.debt/variance and the Sleep Score Trend always reflect today.
     targetDate
       ? db.query.sleepSessions.findMany({
           where: eq(sleepSessions.userId, userId),
           orderBy: [desc(sleepSessions.sleepDate)],
-          limit: 30,
+          limit: 90,
+          with: { stages: true },
         })
       : Promise.resolve(null),
     db.query.syncState.findFirst({
@@ -164,6 +165,7 @@ export async function readDashboardData(targetDate?: string) {
     nightSamples,
     8,
     currentStateRows ?? undefined,
+    currentStateRows ?? undefined,
   );
 
   return {
@@ -177,15 +179,19 @@ export async function readDashboardData(targetDate?: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Fetches sessions from Google Health, normalizes, persists (upsert on
- * startTime), and fills the HR sample cache for the most recent night if
+ * Core sync: fetches sessions from Google Health, normalizes, persists (upsert
+ * on startTime), and fills the HR sample cache for the most recent night if
  * sparse. Returns void — callers re-read via readDashboardData after this.
+ *
+ * Does NOT touch the Next.js cache, so it is safe to call during render (the
+ * auto-sync path in loadPageData does exactly that). Non-render callers that
+ * need sibling routes invalidated use {@link syncFromGoogle} instead.
  *
  * @param days - How many days back to fetch. Defaults to RECONCILE_WINDOW_DAYS
  *   (3). Pass a wider value only for DB recovery / first-time backfill; normal
  *   page loads and the Sync button always use the default.
  */
-export async function syncFromGoogle({ days = RECONCILE_WINDOW_DAYS }: { days?: number } = {}): Promise<void> {
+async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number } = {}): Promise<void> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   const userId = session.user.id;
@@ -249,6 +255,19 @@ export async function syncFromGoogle({ days = RECONCILE_WINDOW_DAYS }: { days?: 
       set: { lastSyncedAt: sql`NOW()` },
     });
 
+}
+
+/**
+ * Server action: full sync followed by dashboard cache invalidation.
+ *
+ * Call ONLY from non-render contexts — the Sync button and the /api/sync route.
+ * revalidatePath is unsupported during render, so the auto-sync inside
+ * render-time callers must NOT call this directly — use the <AutoSync> client
+ * component instead, which fires post-render where revalidatePath is legal.
+ */
+export async function syncFromGoogle(opts: { days?: number } = {}): Promise<void> {
+  await runGoogleSync(opts);
+
   // Invalidate server-side page caches so the next navigation gets fresh data.
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/sleep");
@@ -260,39 +279,39 @@ export async function syncFromGoogle({ days = RECONCILE_WINDOW_DAYS }: { days?: 
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * The single entry point for dashboard pages. On the today view, checks
- * whether the last sync is older than STALE_AFTER_HOURS and runs a Google
- * sync if so. Browsing past dates (any targetDate ≠ today) never triggers
- * a sync — historical data is served from cache only.
+ * The single entry point for dashboard pages. Reads Postgres and computes
+ * analytics — no Google calls, no DB writes, no revalidatePath. Render-safe.
+ *
+ * Returns `shouldAutoSync: true` only when (a) the selected date is today and
+ * (b) the sync clock is older than STALE_AFTER_HOURS. The caller renders a
+ * client-side <AutoSync> component that fires the actual sync after paint,
+ * where revalidatePath is legal.
+ *
+ * Historical dates (any targetDate ≠ today) always return shouldAutoSync=false
+ * so navigating past nights never triggers a Google call.
  */
 export async function loadPageData(targetDate?: string) {
   const authSession = await auth();
   if (!authSession?.user?.id) throw new Error("Unauthorized");
   const userId = authSession.user.id;
 
+  // Staleness decision — pure read, no side effects.
+  // localToday() returns a local-tz YYYY-MM-DD string; never use toISOString()
+  // for calendar-date comparisons.
   const isToday = !targetDate || targetDate === localToday();
+  let shouldAutoSync = false;
   if (isToday) {
     const syncRow = await db.query.syncState.findFirst({
       where: eq(syncState.userId, userId),
     });
     const staleMs = STALE_AFTER_HOURS * 60 * 60 * 1000;
-    const isStale =
+    shouldAutoSync =
       !syncRow?.lastSyncedAt ||
       Date.now() - syncRow.lastSyncedAt.getTime() > staleMs;
-    if (isStale) {
-      try {
-        await syncFromGoogle();
-      } catch (err) {
-        // Auto-sync failure is non-fatal — render whatever is in cache.
-        console.error(
-          "[sync] Auto-sync failed — rendering cached data:",
-          err instanceof Error ? err.message : err
-        );
-      }
-    }
   }
 
-  return readDashboardData(targetDate);
+  const data = await readDashboardData(targetDate);
+  return { ...data, shouldAutoSync };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

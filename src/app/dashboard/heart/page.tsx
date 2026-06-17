@@ -3,6 +3,7 @@
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import SyncButton from "../components/sync-button";
+import AutoSync from "../components/auto-sync";
 import HeartCharts from "../components/heart-charts";
 import DateNavigator from "../components/date-navigator";
 import { localToday } from "@/lib/dates";
@@ -60,6 +61,7 @@ export default async function HeartPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <AutoSync shouldSync={data?.shouldAutoSync ?? false} />
           <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
           <DateNavigator />
         </div>

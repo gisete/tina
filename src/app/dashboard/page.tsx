@@ -4,6 +4,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import SyncButton from "./components/sync-button";
+import AutoSync from "./components/auto-sync";
 
 function formatSleepMs(ms: number): string {
   const hours = Math.floor(ms / 3_600_000);
@@ -69,7 +70,10 @@ export default async function DashboardOverviewPage() {
             Your personal health intelligence hub. Select a module to explore your data.
           </p>
         </div>
-        <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
+        <div className="flex items-center gap-2.5">
+          <AutoSync shouldSync={data?.shouldAutoSync ?? false} />
+          <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
+        </div>
       </div>
 
       {/* Bento Grid */}

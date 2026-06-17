@@ -4,11 +4,11 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import SyncButton from "../components/sync-button";
+import AutoSync from "../components/auto-sync";
 import SleepCharts from "../components/sleep-charts";
 import HypnogramChart from "../components/hypnogram-chart";
 import DateNavigator from "../components/date-navigator";
 import ContinuityExplainer from "../components/continuity-explainer";
-import NightHeartChart from "../components/night-heart-chart";
 import { localToday } from "@/lib/dates";
 import { formatClockTime } from "@/lib/format";
 
@@ -41,7 +41,10 @@ export default async function SleepPage({
             Analyze your sleep architecture, efficiency, and debt to optimize recovery and daily performance.
           </p>
         </div>
-        <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
+        <div className="flex items-center gap-2.5">
+          <AutoSync shouldSync={data?.shouldAutoSync ?? false} />
+          <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
+        </div>
       </div>
 
       {!data || !data.hasData ? (
@@ -90,31 +93,13 @@ export default async function SleepPage({
               </div>
             )}
 
-            {/* Overnight Heart Rate */}
-            {data.lastNight && data.nightHrSeries.length > 1 && (
-              <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
-                <div className="mb-6">
-                  <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">Overnight Heart Rate</h2>
-                  <p className="font-sans text-sm text-on-surface-variant mt-1">
-                    Beats per minute across the night — dips below the dashed line mark restorative stretches.
-                  </p>
-                </div>
-                <NightHeartChart
-                  series={data.nightHrSeries}
-                  sessionStart={data.lastNight.startTime}
-                  sessionEnd={data.lastNight.endTime}
-                  baselineRhr={data.nightHeart?.baselineRhr ?? data.heart?.overallBaseline?.avgRhr ?? null}
-                />
-              </div>
-            )}
-
             {/* Night metric cards — 2 up */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
 
-              {/* Sleep Intelligence Score */}
+              {/* Sleep Score */}
               <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
                 <div className="flex justify-between items-start mb-4">
-                  <span className="text-sm font-medium text-on-surface-variant">Sleep Intelligence Score</span>
+                  <span className="text-sm font-medium text-on-surface-variant">Sleep Score</span>
                   <span className="px-2 py-0.5 bg-primary-container text-black font-semibold text-xs rounded-full">Target &gt;85%</span>
                 </div>
                 <div>
@@ -128,7 +113,10 @@ export default async function SleepPage({
               </div>
 
               {/* Night Heart Rate */}
-              <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
+              <Link
+                href={`/dashboard/sleep/heart-rate?date=${targetDate}`}
+                className="group bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] hover:border-outline transition-all"
+              >
                 <div className="flex justify-between items-start mb-4">
                   <span className="text-sm font-medium text-on-surface-variant">Night Heart Rate</span>
                   <span className={`px-2 py-0.5 font-semibold text-xs rounded-full ${
@@ -140,7 +128,7 @@ export default async function SleepPage({
                   </span>
                 </div>
                 <div>
-                  <div className="font-display text-4xl font-bold text-black tracking-tight">
+                  <div className="font-display text-4xl font-bold text-heart-accent tracking-tight">
                     {data.nightHeart?.restingHr != null
                       ? <>{data.nightHeart.restingHr}<span className="text-xl text-on-surface-variant font-normal ml-0.5">bpm</span></>
                       : <span className="text-on-surface-variant">—</span>}
@@ -150,8 +138,13 @@ export default async function SleepPage({
                       ? `${data.nightHeart.hrv} ms HRV${data.nightHeart.baselineRhr != null ? ` · baseline ${data.nightHeart.baselineRhr} bpm` : ""}`
                       : "Awaiting overnight readings"}
                   </div>
+                  <div className="mt-3 pt-3 border-t border-outline-variant/50 flex justify-end">
+                    <span className="text-xs font-semibold text-on-surface-variant group-hover:text-on-surface transition-colors">
+                      See more →
+                    </span>
+                  </div>
                 </div>
-              </div>
+              </Link>
 
             </div>
 
@@ -303,7 +296,7 @@ export default async function SleepPage({
           </div>{/* end Current Status */}
 
           {/* ════ EFFICIENCY TREND ══════════════════════════════════════════ */}
-          <SleepCharts data={(data.chartTimeline || []).map(({ date, efficiency }) => ({ date, efficiency }))} />
+          <SleepCharts data={(data.chartTimeline || []).map(({ date, sleepScore }) => ({ date, sleepScore }))} />
 
         </div>
       )}

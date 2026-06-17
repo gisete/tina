@@ -7,6 +7,8 @@ import {
   calculateCircadianVariance,
   calculateSleepDebt,
   calculateHolisticSleepScore,
+  calculateDeepSleepContinuity,
+  calculateRestlessness,
   calculateNightHeartSummary,
   getLastNightDetail,
   detectHrRestlessness,
@@ -48,6 +50,11 @@ export type DashboardData = ReturnType<typeof assembleDashboardData>;
  * pass the truly-latest (unscoped) sessions here so `currentState.debt` and
  * `currentState.variance` always reflect now, not the selected night's horizon.
  * Omit when already querying the latest data (no `targetDate`).
+ *
+ * `chartSessionRows` — today-anchored sessions with stages used exclusively for
+ * `chartTimeline`. Supply when `targetDate` is in the past so the Sleep Score
+ * Trend stays anchored to today as the user navigates nights. Omit when already
+ * on today's view (`sessions` is already today-anchored).
  */
 export function assembleDashboardData(
   sessions: SleepSessionRow[],
@@ -55,6 +62,7 @@ export function assembleDashboardData(
   nightHrSamples: Array<{ timestamp: Date; bpm: number }> = [],
   sleepDebtTargetHours: number = 8,
   currentStateSessions?: AnalyticSession[],
+  chartSessionRows?: SleepSessionRow[],
 ) {
   if (sessions.length === 0) {
     return { hasData: false as const, message: "No sleep records processed yet." };
@@ -98,14 +106,49 @@ export function assembleDashboardData(
     : variance;
   const lastNight = getLastNightDetail(mainSessions);
 
-  const chartTimeline = [...mainSessions]
+  // When a past targetDate is in use, chartSessionRows holds today-anchored
+  // sessions so the trend stays "as of today" regardless of which night is selected.
+  const chartSource = chartSessionRows
+    ? selectMainSessions(
+        chartSessionRows.map((s) => ({
+          sleepDate: s.sleepDate,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          totalSleepMs: s.totalSleepMs,
+          efficiencyScore: s.efficiencyScore,
+          stages: s.stages.map((st) => ({
+            stageType: st.stageType,
+            startTime: st.startTime,
+            endTime: st.endTime,
+            durationMs: st.durationMs,
+          })),
+        }))
+      )
+    : mainSessions;
+
+  const chartTimeline = [...chartSource]
     .sort((a, b) => a.sleepDate.localeCompare(b.sleepDate))
     .map((s) => {
-      const debtItem = debt.timeline.find((t) => t.date === s.sleepDate);
+      const timeInBedMs = s.endTime.getTime() - s.startTime.getTime();
+      // Convert stage Date objects to ISO strings for the pure analytics engines.
+      const stageIntervals = (s.stages ?? []).map((st) => ({
+        stageType: st.stageType,
+        startTime: st.startTime.toISOString(),
+        endTime: st.endTime.toISOString(),
+        durationMs: st.durationMs,
+      }));
+      const deepContinuity = calculateDeepSleepContinuity(stageIntervals);
+      const restlessness = calculateRestlessness(stageIntervals);
+      const sleepScore = calculateHolisticSleepScore(
+        s.totalSleepMs,
+        timeInBedMs,
+        deepContinuity.continuityScore,
+        restlessness.disruptionIndex,
+        null,
+      );
       return {
         date: s.sleepDate,
-        efficiency: Math.round(s.efficiencyScore * 100),
-        runningDebtHours: debtItem?.runningDebtHours ?? 0,
+        sleepScore,
       };
     });
 

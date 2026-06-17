@@ -30,6 +30,24 @@ const W_CARDIAC    = 0.15;
 const EXCELLENT_EFFICIENCY = 0.95;
 
 /**
+ * Raw sleep efficiency: the fraction of time in bed actually spent asleep.
+ * Returns a value in [0, 1]; clamped so anomalous data never exceeds 1.
+ *
+ * This is the SINGLE definition of efficiency used everywhere in Tina —
+ * the Efficiency Trend shows it as a percentage (× 100), and the holistic
+ * score scales it against EXCELLENT_EFFICIENCY before weighting.
+ *
+ * Do NOT use sleep_sessions.efficiency_score (Google's minutesAsleep /
+ * minutesInSleepPeriod) for any display or scoring purpose — that value is
+ * a different denominator, frozen at sync time, and kept only for legacy
+ * reasons pending a column cleanup.
+ */
+export function rawSleepEfficiency(totalSleepMs: number, timeInBedMs: number): number {
+  if (timeInBedMs <= 0) return 0;
+  return Math.min(totalSleepMs / timeInBedMs, 1);
+}
+
+/**
  * Computes a 0-100 holistic sleep quality score.
  *
  * When `cardiacScore` is null the cardiac weight (15%) is redistributed
@@ -50,10 +68,7 @@ export function calculateHolisticSleepScore(
   if (timeInBedMs <= 0) return 0;
 
   const volumeScore     = Math.min(totalSleepMs / targetSleepMs, 1.0) * 100;
-  const efficiencyScore = Math.min(
-    (totalSleepMs / timeInBedMs) / EXCELLENT_EFFICIENCY,
-    1.0
-  ) * 100;
+  const efficiencyScore = Math.min(rawSleepEfficiency(totalSleepMs, timeInBedMs) / EXCELLENT_EFFICIENCY, 1.0) * 100;
 
   const components: Array<{ score: number; weight: number }> = [
     { score: volumeScore,       weight: W_VOLUME },
