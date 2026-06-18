@@ -24,6 +24,7 @@ import {
 import { localToday } from "@/lib/dates";
 import { formatDateMMDD } from "@/lib/format";
 import { selectTrendTicks } from "@/lib/charts/trend-ticks";
+import ExpandableCard from "../../components/expandable-card";
 
 // ---------------------------------------------------------------------------
 // Window filter
@@ -43,7 +44,7 @@ const PILL_ACTIVE   = "bg-on-surface text-white";
 const PILL_INACTIVE = "bg-surface-container text-on-surface-variant hover:bg-surface-container-high";
 
 // ---------------------------------------------------------------------------
-// Per-metric config — unchanged structure
+// Per-metric config — unchanged
 // ---------------------------------------------------------------------------
 
 interface MetricConfig {
@@ -89,16 +90,53 @@ const METRIC_CONFIG: Record<HrMetric, MetricConfig> = {
   },
 };
 
-// Fixed YAxis width shared by both charts so their plot areas share the same left edge.
-// Without this, Recharts auto-sizes each axis independently (bpm ticks vs ms ticks differ
-// in rendered width), offsetting the two x-axes and breaking vertical date alignment.
-const Y_AXIS_W = 40;
-
-// Target number of visible x-axis labels regardless of window length.
+const Y_AXIS_W   = 40;
 const TICK_TARGET = 7;
 
 // ---------------------------------------------------------------------------
-// Metric section — presentational, no shell, no hooks
+// Metric overview line — one row of the collapsed summary
+// ---------------------------------------------------------------------------
+
+function MetricOverviewLine({
+  label,
+  avg,
+  unit,
+  delta,
+  metric,
+}: {
+  label: string;
+  avg: number | null;
+  unit: string;
+  delta: number | null;
+  metric: HrMetric;
+}) {
+  const sentiment  = trendSentiment(metric, delta);
+  const deltaColor =
+    sentiment === "improvement" ? "text-emerald-600" :
+    sentiment === "decline"     ? "text-amber-600" :
+    "text-on-surface-variant";
+  const prefix = delta !== null && delta > 0 ? "+" : "";
+
+  return (
+    <div className="flex items-baseline gap-2 text-sm">
+      <span className="text-on-surface-variant w-20 shrink-0">{label}</span>
+      <span className="font-semibold text-on-surface">
+        {avg !== null ? (
+          <>{avg}<span className="font-normal text-on-surface-variant ml-0.5">{unit}</span></>
+        ) : "—"}
+      </span>
+      {delta !== null && avg !== null && (
+        <>
+          <span className="text-on-surface-variant">·</span>
+          <span className={`font-semibold ${deltaColor}`}>{prefix}{delta}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Metric detail section — chart + stat row, unchanged from before
 // ---------------------------------------------------------------------------
 
 function HrMetricCard({
@@ -119,7 +157,6 @@ function HrMetricCard({
     hrv:              p.hrv,
   }));
 
-  // Which indices get a visible x-axis label — ~7 evenly spread, always first + last.
   const tickIndices = selectTrendTicks(chartData.length, TICK_TARGET);
 
   const avgValue = cfg.getAvg(stats);
@@ -202,8 +239,6 @@ function HrMetricCard({
                 dot={activeWindow === "90d"
                   ? false
                   : (dotProps: DotItemDotProps) => {
-                      // White-fill + indigo-ring marker per real night; null/gap days get nothing.
-                      // stroke via style so var() resolves — SVG presentation attrs don't support it.
                       const { cx, cy, value, index } = dotProps;
                       if (value == null || cx == null || cy == null) return null;
                       return (
@@ -276,7 +311,7 @@ function HrMetricCard({
 }
 
 // ---------------------------------------------------------------------------
-// Section — single card shell, shared window control, stacked metric sections
+// Root component — owns window state, passes overview + detail into shell
 // ---------------------------------------------------------------------------
 
 interface Props {
@@ -297,39 +332,55 @@ export default function HrTrendChart({ summaries }: Props) {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  // Engine called once — result.stats carries both RHR and HRV; both sections read from it.
   const result = calculateHrTrends(summaries, activeWindow, localToday());
+  const { stats } = result;
 
-  return (
-    <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
-      {/* Card header: title + caption left, window pills right */}
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
-        <div>
-          <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">Recovery Trends</h2>
-          <p className="text-sm text-on-surface-variant mt-1">
-            As of today. Dashed line = window average.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {WINDOWS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setWindow(key)}
-              className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
-                activeWindow === key ? PILL_ACTIVE : PILL_INACTIVE
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+  // Overview: per-metric glance summary — recomputed whenever window changes.
+  const overview = (
+    <div className="space-y-1.5">
+      <MetricOverviewLine
+        label="Resting HR"
+        avg={stats.windowAvgRhr}
+        unit="bpm"
+        delta={stats.rhrDeltaVsPrev}
+        metric="rhr"
+      />
+      <MetricOverviewLine
+        label="HRV"
+        avg={stats.windowAvgHrv}
+        unit="ms"
+        delta={stats.hrvDeltaVsPrev}
+        metric="hrv"
+      />
+    </div>
+  );
+
+  // Detail: window control + two stacked charts + stat blocks.
+  const detail = (
+    <>
+      <div className="flex gap-2 mb-6">
+        {WINDOWS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setWindow(key)}
+            className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${
+              activeWindow === key ? PILL_ACTIVE : PILL_INACTIVE
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <HrMetricCard metric="rhr" result={result} activeWindow={activeWindow} />
-
       <div className="my-8 border-t border-outline-variant/50" />
-
       <HrMetricCard metric="hrv" result={result} activeWindow={activeWindow} />
-    </div>
+    </>
+  );
+
+  return (
+    <ExpandableCard title="Recovery Trends" overview={overview} defaultExpanded={false} expandLabel="Show trends">
+      {detail}
+    </ExpandableCard>
   );
 }

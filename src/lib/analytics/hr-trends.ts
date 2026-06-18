@@ -193,6 +193,91 @@ export function calculateSeriesTrend(
 }
 
 // ---------------------------------------------------------------------------
+// Standardization engine — z-scores against a fixed 90-day baseline
+// ---------------------------------------------------------------------------
+
+/** Minimum non-null nights in the baseline before z-scores are meaningful. */
+export const MIN_BASELINE_NIGHTS = 14;
+
+export interface StandardizedMetricSeries {
+  /** Z-score per calendar day in the displayed window; null when night has no data. */
+  points: (number | null)[];
+  mean: number;
+  std: number;
+  /** Count of non-null nights used to compute the baseline. */
+  nights: number;
+  /** False when std < 1e-6 or nights < MIN_BASELINE_NIGHTS. */
+  baselineReady: boolean;
+}
+
+export interface StandardizedRecoveryResult {
+  rhr: StandardizedMetricSeries;
+  hrv: StandardizedMetricSeries;
+}
+
+/**
+ * Standardizes RHR and HRV against a fixed baseline derived from all
+ * non-null nights in `summaries` (caller provides ≥90 days).
+ *
+ * Only dates in [windowStart, windowEnd] are emitted in `points`. Switching
+ * the displayed window does NOT change the baseline; the baseline stays locked
+ * to whatever `summaries` covers regardless of window length.
+ *
+ * Guards: if std < 1e-6 or nights < MIN_BASELINE_NIGHTS, that metric's
+ * z-series is all-null and `baselineReady` is false.
+ * Signs are raw — a positive z for RHR means higher-than-normal strain.
+ */
+export function standardizeRecoverySeries(
+  summaries: DailyHrSummary[],
+  windowStart: string,
+  windowEnd: string,
+): StandardizedRecoveryResult {
+  const byDate = new Map<string, DailyHrSummary>();
+  for (const s of summaries) {
+    byDate.set(s.date, s);
+  }
+
+  function standardizeMetric(
+    getValue: (row: DailyHrSummary) => number | null,
+  ): StandardizedMetricSeries {
+    const baselineValues: number[] = [];
+    for (const row of summaries) {
+      const v = getValue(row);
+      if (v !== null) baselineValues.push(v);
+    }
+
+    const nights = baselineValues.length;
+    const mean   = nights > 0 ? avg(baselineValues) : 0;
+    const variance =
+      nights > 0
+        ? baselineValues.reduce((sum, v) => sum + (v - mean) ** 2, 0) / nights
+        : 0;
+    const std = Math.sqrt(variance);
+    const baselineReady = nights >= MIN_BASELINE_NIGHTS && std >= 1e-6;
+
+    const points: (number | null)[] = [];
+    let d = windowStart;
+    while (d <= windowEnd) {
+      if (!baselineReady) {
+        points.push(null);
+      } else {
+        const row = byDate.get(d);
+        const v = row ? getValue(row) : null;
+        points.push(v !== null ? (v - mean) / std : null);
+      }
+      d = addDays(d, 1);
+    }
+
+    return { points, mean, std, nights, baselineReady };
+  }
+
+  return {
+    rhr: standardizeMetric((row) => row.restingHeartRate),
+    hrv: standardizeMetric((row) => row.hrv),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Dual-metric HR trend (public API)
 // ---------------------------------------------------------------------------
 

@@ -7,7 +7,7 @@ import {
   type RemSleepContinuity,
   type LightSleepStability,
 } from "./continuity";
-import { calculateHolisticSleepScore } from "./score";
+import { calculateHolisticSleepScore, type SleepScoreBreakdown } from "./score";
 import { calculateRestlessness, type RestlessnessAnalysis } from "./restlessness";
 
 /** Output of {@link getLastNightDetail} — all primitives, ready for serialisation. */
@@ -26,6 +26,11 @@ export interface LastNightDetail {
    * with a 10% cardiac recovery component (40/30/20/10) — see assemble.ts.
    */
   holisticScore: number;
+  /**
+   * Full per-component breakdown — set by assemble.ts after the 5-component
+   * cardiac enrichment. Absent until the assembly phase completes.
+   */
+  holisticBreakdown?: SleepScoreBreakdown;
   /**
    * Aggregated percentage breakdown (0-100) for each stage.
    * Values sum to 100 (within rounding) and are derived from total duration,

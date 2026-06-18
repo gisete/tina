@@ -6,6 +6,7 @@ import {
   calculateSleepArchitecture,
   calculateCircadianVariance,
   calculateSleepDebt,
+  calculateSleepScoreBreakdown,
   calculateHolisticSleepScore,
   calculateDeepSleepContinuity,
   calculateRestlessness,
@@ -208,13 +209,15 @@ export function assembleDashboardData(
     const timeInBedMs =
       new Date(lastNight.endTime).getTime() - new Date(lastNight.startTime).getTime();
 
-    lastNight.holisticScore = calculateHolisticSleepScore(
+    const holisticBreakdown = calculateSleepScoreBreakdown(
       lastNight.totalSleepMs,
       timeInBedMs,
       lastNight.continuity.continuityScore,
       lastNight.restlessness.disruptionIndex,
       cardiacScore
     );
+    lastNight.holisticScore = holisticBreakdown.score;
+    lastNight.holisticBreakdown = holisticBreakdown;
   }
 
   return {

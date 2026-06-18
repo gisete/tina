@@ -7,6 +7,7 @@ import SyncButton from "../components/sync-button";
 import AutoSync from "../components/auto-sync";
 import SleepCharts from "../components/sleep-charts";
 import HypnogramChart from "../components/hypnogram-chart";
+import SleepScoreCard from "../components/sleep-score-card";
 import DateNavigator from "../components/date-navigator";
 import ContinuityExplainer from "../components/continuity-explainer";
 import { localToday } from "@/lib/dates";
@@ -97,20 +98,10 @@ export default async function SleepPage({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
 
               {/* Sleep Score */}
-              <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
-                <div className="flex justify-between items-start mb-4">
-                  <span className="text-sm font-medium text-on-surface-variant">Sleep Score</span>
-                  <span className="px-2 py-0.5 bg-primary-container text-black font-semibold text-xs rounded-full">Target &gt;85%</span>
-                </div>
-                <div>
-                  <div className="font-display text-4xl font-bold text-black tracking-tight">
-                    {data.lastNight?.holisticScore || 0}<span className="text-xl text-on-surface-variant font-normal ml-0.5">%</span>
-                  </div>
-                  <div className="text-sm text-on-surface-variant mt-1">
-                    Weighted composite of volume, efficiency, continuity, disruption, and cardiac recovery
-                  </div>
-                </div>
-              </div>
+              <SleepScoreCard
+                score={data.lastNight?.holisticScore || 0}
+                breakdown={data.lastNight?.holisticBreakdown}
+              />
 
               {/* Night Heart Rate */}
               <Link

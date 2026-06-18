@@ -130,7 +130,7 @@ export default function SleepCharts({ data }: { data: ScorePoint[] }) {
               labelStyle={{ color: "#ffffff", fontFamily: "var(--font-display)", fontWeight: "bold" }}
               itemStyle={{ color: "#e5e2d9", fontFamily: "var(--font-sans)" }}
               formatter={(value) =>
-                value != null ? [`${value}%`, "Sleep Score"] : ["—", "Sleep Score"]
+                value != null ? [`${value}`, "Sleep Score"] : ["—", "Sleep Score"]
               }
             />
             <Area

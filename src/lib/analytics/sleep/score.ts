@@ -47,15 +47,92 @@ export function rawSleepEfficiency(totalSleepMs: number, timeInBedMs: number): n
   return Math.min(totalSleepMs / timeInBedMs, 1);
 }
 
+// ---------------------------------------------------------------------------
+// Breakdown types — returned by calculateSleepScoreBreakdown.
+// ---------------------------------------------------------------------------
+
+export type SleepScoreComponentKey = "volume" | "efficiency" | "continuity" | "disruption" | "cardiac";
+
+export type SleepScoreComponent = {
+  key: SleepScoreComponentKey;
+  /** false when the component was absent and its weight redistributed. */
+  present: boolean;
+  /** 0–100 sub-score for this night; null when absent. */
+  subScore: number | null;
+  /** Effective weight as a fraction 0–1, after redistribution; 0 when absent. */
+  weight: number;
+  /** subScore * weight — points contributed to the final score; 0 when absent. */
+  contribution: number;
+};
+
+export type SleepScoreBreakdown = {
+  score: number;
+  components: SleepScoreComponent[];
+};
+
 /**
- * Computes a 0-100 holistic sleep quality score.
+ * Computes the holistic sleep score with a full per-component breakdown.
+ * The five components always appear in the returned array; absent ones have
+ * `present: false` and `weight: 0 / contribution: 0`.
  *
- * When `cardiacScore` is null the cardiac weight (15%) is redistributed
- * proportionally across the remaining four components, so every call produces
- * a comparable score regardless of data availability.
- *
- * @param disruptionIndex 0-100 from the restlessness engine (100 = no disruption).
- * @param cardiacScore    0-100 cardiac recovery; null when HR data is absent.
+ * The present weights sum to 1; the present contributions sum to `score`
+ * (within ±0.5 due to rounding).
+ */
+export function calculateSleepScoreBreakdown(
+  totalSleepMs: number,
+  timeInBedMs: number,
+  deepContinuityScore: number,
+  disruptionIndex: number,
+  cardiacScore: number | null = null,
+  targetSleepMs: number = 8 * 3_600_000
+): SleepScoreBreakdown {
+  if (timeInBedMs <= 0) {
+    return {
+      score: 0,
+      components: [
+        { key: "volume",      present: false, subScore: null, weight: 0, contribution: 0 },
+        { key: "efficiency",  present: false, subScore: null, weight: 0, contribution: 0 },
+        { key: "continuity",  present: false, subScore: null, weight: 0, contribution: 0 },
+        { key: "disruption",  present: false, subScore: null, weight: 0, contribution: 0 },
+        { key: "cardiac",     present: false, subScore: null, weight: 0, contribution: 0 },
+      ],
+    };
+  }
+
+  const volumeScore     = Math.min(totalSleepMs / targetSleepMs, 1.0) * 100;
+  const efficiencyScore = Math.min(rawSleepEfficiency(totalSleepMs, timeInBedMs) / EXCELLENT_EFFICIENCY, 1.0) * 100;
+
+  const raw: Array<{ key: SleepScoreComponentKey; subScore: number; nominalWeight: number }> = [
+    { key: "volume",      subScore: volumeScore,          nominalWeight: W_VOLUME },
+    { key: "efficiency",  subScore: efficiencyScore,      nominalWeight: W_EFFICIENCY },
+    { key: "continuity",  subScore: deepContinuityScore,  nominalWeight: W_CONTINUITY },
+    { key: "disruption",  subScore: disruptionIndex,      nominalWeight: W_DISRUPTION },
+  ];
+  if (cardiacScore !== null) {
+    raw.push({ key: "cardiac", subScore: cardiacScore, nominalWeight: W_CARDIAC });
+  }
+
+  const totalWeight = raw.reduce((sum, c) => sum + c.nominalWeight, 0);
+
+  const presentComponents: SleepScoreComponent[] = raw.map((c) => {
+    const weight       = c.nominalWeight / totalWeight;
+    const contribution = c.subScore * weight;
+    return { key: c.key, present: true, subScore: c.subScore, weight, contribution };
+  });
+
+  const score = Math.round(presentComponents.reduce((sum, c) => sum + c.contribution, 0));
+
+  const components: SleepScoreComponent[] = [...presentComponents];
+  if (cardiacScore === null) {
+    components.push({ key: "cardiac", present: false, subScore: null, weight: 0, contribution: 0 });
+  }
+
+  return { score, components };
+}
+
+/**
+ * Thin wrapper — returns only the composite score for the three existing call
+ * sites that don't need the per-component breakdown. Signature is unchanged.
  */
 export function calculateHolisticSleepScore(
   totalSleepMs: number,
@@ -65,28 +142,12 @@ export function calculateHolisticSleepScore(
   cardiacScore: number | null = null,
   targetSleepMs: number = 8 * 3_600_000
 ): number {
-  if (timeInBedMs <= 0) return 0;
-
-  const volumeScore     = Math.min(totalSleepMs / targetSleepMs, 1.0) * 100;
-  const efficiencyScore = Math.min(rawSleepEfficiency(totalSleepMs, timeInBedMs) / EXCELLENT_EFFICIENCY, 1.0) * 100;
-
-  const components: Array<{ score: number; weight: number }> = [
-    { score: volumeScore,       weight: W_VOLUME },
-    { score: efficiencyScore,   weight: W_EFFICIENCY },
-    { score: deepContinuityScore, weight: W_CONTINUITY },
-    { score: disruptionIndex,   weight: W_DISRUPTION },
-  ];
-  if (cardiacScore !== null) {
-    components.push({ score: cardiacScore, weight: W_CARDIAC });
-  }
-
-  // Normalize so missing components don't deflate the total — their weight
-  // is spread across the rest in the same proportions.
-  const totalWeight = components.reduce((sum, c) => sum + c.weight, 0);
-  const rawScore = components.reduce(
-    (sum, c) => sum + (c.score / 100) * (c.weight / totalWeight),
-    0
-  );
-
-  return Math.round(rawScore * 100);
+  return calculateSleepScoreBreakdown(
+    totalSleepMs,
+    timeInBedMs,
+    deepContinuityScore,
+    disruptionIndex,
+    cardiacScore,
+    targetSleepMs,
+  ).score;
 }

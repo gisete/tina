@@ -7,6 +7,7 @@ import { readHrSummaries } from "@/lib/sync/read";
 import NightHeartChart from "../../components/night-heart-chart";
 import DateNavigator from "../../components/date-navigator";
 import HrTrendChart from "./hr-trend-chart";
+import RecoveryBalanceChart from "./recovery-balance-chart";
 import AutoSync from "../../components/auto-sync";
 import { localToday, addDays } from "@/lib/dates";
 import { formatClockTime } from "@/lib/format";
@@ -151,6 +152,9 @@ export default async function HeartRateDetailPage({
           {/* ── HR trend — anchored to today, independent of ?date= ── */}
           {/* HrTrendChart renders its own card shell; no wrapper needed here */}
           <HrTrendChart summaries={summaries} />
+
+          {/* ── Recovery vs Normal — z-scores against 90-day baseline ── */}
+          <RecoveryBalanceChart summaries={summaries} />
         </>
       )}
     </div>
