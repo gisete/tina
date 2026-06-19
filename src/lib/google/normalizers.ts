@@ -288,6 +288,67 @@ export function normalizeHeartData(
 }
 
 // ---------------------------------------------------------------------------
+// Activity zone minute normalizer
+// ---------------------------------------------------------------------------
+
+import type { HrZoneType, ZoneRecord } from "@/lib/analytics/activity";
+
+/** Raw API shape for one `time-in-heart-rate-zone` data point (1-minute interval). */
+export interface GoogleZoneMinutePoint {
+  timeInHeartRateZone?: {
+    interval?: {
+      startTime?: string;
+      endTime?: string;
+      civilStartTime?: {
+        date?: { year?: number; month?: number; day?: number };
+      };
+    };
+    heartRateZoneType?: string;
+  };
+}
+
+const VALID_HR_ZONES = new Set<HrZoneType>(["LIGHT", "MODERATE", "VIGOROUS", "PEAK"]);
+
+/**
+ * Converts raw `time-in-heart-rate-zone` intraday points into typed ZoneRecords.
+ * Civil date comes from the API's own civilStartTime.date — no UTC conversion needed.
+ * Duration is computed from start/end (normally 1 min); sub-minute records are dropped.
+ */
+export function normalizeZoneRecords(points: GoogleZoneMinutePoint[]): ZoneRecord[] {
+  const records: ZoneRecord[] = [];
+
+  for (const pt of points) {
+    const tiz = pt.timeInHeartRateZone;
+    if (!tiz) continue;
+
+    const interval = tiz.interval;
+    if (!interval?.startTime || !interval?.endTime) continue;
+
+    const start = new Date(interval.startTime).getTime();
+    const end   = new Date(interval.endTime).getTime();
+    if (isNaN(start) || isNaN(end) || end <= start) continue;
+
+    const durationMinutes = Math.round((end - start) / 60_000);
+    if (durationMinutes < 1) continue;
+
+    const rawZone = tiz.heartRateZoneType ?? "";
+    if (!VALID_HR_ZONES.has(rawZone as HrZoneType)) {
+      console.warn(`[normalizer] Unknown HR zone type: ${JSON.stringify(rawZone)}`);
+      continue;
+    }
+    const zoneType = rawZone as HrZoneType;
+
+    const d = interval.civilStartTime?.date;
+    if (!d?.year || !d?.month || !d?.day) continue;
+    const civilDate = `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+
+    records.push({ zoneType, civilDate, durationMinutes });
+  }
+
+  return records;
+}
+
+// ---------------------------------------------------------------------------
 // Intra-day heart rate sample normalizer
 // ---------------------------------------------------------------------------
 

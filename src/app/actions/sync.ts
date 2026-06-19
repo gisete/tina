@@ -7,13 +7,16 @@ import {
   fetchGoogleSleepData,
   fetchGoogleHeartData,
   fetchGoogleHeartRateSamples,
+  fetchGoogleZoneRecords,
 } from "@/lib/google/client";
 import {
   normalizeGoogleSleepSessions,
   normalizeHeartData,
   normalizeHeartRateSamples,
+  normalizeZoneRecords,
 } from "@/lib/google/normalizers";
-import { persistHealthRecords, persistHeartRateSamples } from "@/lib/sync/persist";
+import { persistHealthRecords, persistHeartRateSamples, persistActivitySummaries } from "@/lib/sync/persist";
+import { aggregateZoneMinutes } from "@/lib/analytics/activity";
 import { assembleDashboardData } from "@/lib/sync/assemble";
 import { selectMainSessions, buildDebtHistory, calculateSleepDebt } from "@/lib/analytics/sleep";
 import { localToday, addDays } from "@/lib/dates";
@@ -202,9 +205,10 @@ async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number }
   const startISO = startDate.toISOString();
   const endISO = endDate.toISOString();
 
-  const [sleepResult, heartResult] = await Promise.allSettled([
+  const [sleepResult, heartResult, zoneResult] = await Promise.allSettled([
     fetchGoogleSleepData(userId, startISO, endISO),
     fetchGoogleHeartData(userId, startISO, endISO),
+    fetchGoogleZoneRecords(userId, startISO, endISO),
   ]);
 
   if (sleepResult.status === "rejected") throw sleepResult.reason;
@@ -214,7 +218,14 @@ async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number }
       heartResult.reason?.message ?? heartResult.reason
     );
   }
+  if (zoneResult.status === "rejected") {
+    console.warn(
+      "[sync] Zone minutes fetch failed (continuing):",
+      zoneResult.reason?.message ?? zoneResult.reason
+    );
+  }
   const rawHeartData = heartResult.status === "fulfilled" ? heartResult.value : null;
+  const rawZonePoints = zoneResult.status === "fulfilled" ? zoneResult.value : [];
 
   const normalizedSleep = normalizeGoogleSleepSessions(userId, sleepResult.value);
   const heartRecords = rawHeartData
@@ -234,6 +245,29 @@ async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number }
   }
 
   await persistHealthRecords(userId, normalizedSleep, heartRecords);
+
+  // Aggregate zone-minute records by civil date and upsert one row per day.
+  if (rawZonePoints.length > 0) {
+    const zoneRecords = normalizeZoneRecords(rawZonePoints);
+    // Group by civil date (already extracted from the API's civilStartTime.date).
+    const byDate = new Map<string, typeof zoneRecords>();
+    for (const r of zoneRecords) {
+      const bucket = byDate.get(r.civilDate) ?? [];
+      bucket.push(r);
+      byDate.set(r.civilDate, bucket);
+    }
+    const activitySummaries = [...byDate.entries()].map(([activityDate, recs]) => {
+      const zones = aggregateZoneMinutes(recs);
+      return {
+        activityDate,
+        lightMinutes:    zones.light,
+        moderateMinutes: zones.moderate,
+        vigorousMinutes: zones.vigorous,
+        peakMinutes:     zones.peak,
+      };
+    });
+    await persistActivitySummaries(userId, activitySummaries);
+  }
 
   // Populate the HR sample cache for the most-recent main session if sparse.
   const recentSessions = await db.query.sleepSessions.findMany({

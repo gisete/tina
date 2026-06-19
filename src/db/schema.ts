@@ -69,10 +69,29 @@ export const heartRateSamples = pgTable(
   ]
 );
 
+export const dailyActivitySummaries = pgTable(
+  "daily_activity_summaries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    activityDate: date("activity_date").notNull(),
+    lightMinutes: integer("light_minutes").notNull().default(0),
+    moderateMinutes: integer("moderate_minutes").notNull().default(0),
+    vigorousMinutes: integer("vigorous_minutes").notNull().default(0),
+    peakMinutes: integer("peak_minutes").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("daily_activity_summaries_user_id_date_idx").on(t.userId, t.activityDate),
+  ]
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sleepSessions: many(sleepSessions),
   heartRateSummaries: many(heartRateSummaries),
   heartRateSamples: many(heartRateSamples),
+  dailyActivitySummaries: many(dailyActivitySummaries),
 }));
 
 export const heartRateSamplesRelations = relations(heartRateSamples, ({ one }) => ({
@@ -156,4 +175,8 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
 
 export const heartRateSummariesRelations = relations(heartRateSummaries, ({ one }) => ({
   user: one(users, { fields: [heartRateSummaries.userId], references: [users.id] }),
+}));
+
+export const dailyActivitySummariesRelations = relations(dailyActivitySummaries, ({ one }) => ({
+  user: one(users, { fields: [dailyActivitySummaries.userId], references: [users.id] }),
 }));

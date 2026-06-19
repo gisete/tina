@@ -12,12 +12,20 @@ export type HrWindow = "week" | "month" | "90d";
 export type HrMetric = "rhr" | "hrv";
 
 /**
- * +1 means higher values are better (HRV); -1 means lower values are better (RHR).
+ * Superset of HrMetric. Register any new series here so trendSentiment and
+ * METRIC_DIRECTION stay as the single source of truth for directional coloring.
+ * HrMetric is a subtype — passing HrMetric where TrendMetric is expected works.
+ */
+export type TrendMetric = HrMetric | "azm";
+
+/**
+ * +1 means higher values are better; -1 means lower values are better.
  * Never hardcode metric direction in components — always derive from this constant.
  */
-export const METRIC_DIRECTION: Record<HrMetric, 1 | -1> = {
+export const METRIC_DIRECTION: Record<TrendMetric, 1 | -1> = {
   rhr: -1,
-  hrv: 1,
+  hrv:  1,
+  azm:  1,
 };
 
 /**
@@ -28,7 +36,7 @@ export const METRIC_DIRECTION: Record<HrMetric, 1 | -1> = {
  * needs to color or label a trend delta; do NOT inline the arithmetic.
  */
 export function trendSentiment(
-  metric: HrMetric,
+  metric: TrendMetric,
   delta: number | null,
 ): "improvement" | "decline" | "neutral" {
   if (delta === null || delta === 0) return "neutral";

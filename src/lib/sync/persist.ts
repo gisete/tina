@@ -2,7 +2,7 @@
 // callers hand in already-normalized records and never touch the schema.
 
 import { db } from "@/db/client";
-import { sleepSessions, sleepStages, heartRateSummaries, heartRateSamples } from "@/db/schema";
+import { sleepSessions, sleepStages, heartRateSummaries, heartRateSamples, dailyActivitySummaries } from "@/db/schema";
 import type {
   normalizeGoogleSleepSession,
   NormalizedHeartRecord,
@@ -96,6 +96,41 @@ export async function persistHealthRecords(
       console.log(`[sync] Upserted ${heartRecords.length} heart records`);
     }
   });
+}
+
+export interface ActivitySummaryRow {
+  activityDate: string; // "YYYY-MM-DD"
+  lightMinutes: number;
+  moderateMinutes: number;
+  vigorousMinutes: number;
+  peakMinutes: number;
+}
+
+/**
+ * Upserts one row per civil day into daily_activity_summaries.
+ * On conflict (re-sync of a recent day), all zone minute columns are replaced —
+ * the new fetch is authoritative, unlike the COALESCE-preserving pattern for
+ * heart summaries (zone minutes can decrease if the API reconciles corrections).
+ */
+export async function persistActivitySummaries(
+  userId: string,
+  summaries: ActivitySummaryRow[],
+): Promise<void> {
+  if (summaries.length === 0) return;
+  await db
+    .insert(dailyActivitySummaries)
+    .values(summaries.map((s) => ({ userId, ...s })))
+    .onConflictDoUpdate({
+      target: [dailyActivitySummaries.userId, dailyActivitySummaries.activityDate],
+      set: {
+        lightMinutes:    sql`EXCLUDED.light_minutes`,
+        moderateMinutes: sql`EXCLUDED.moderate_minutes`,
+        vigorousMinutes: sql`EXCLUDED.vigorous_minutes`,
+        peakMinutes:     sql`EXCLUDED.peak_minutes`,
+        updatedAt:       sql`NOW()`,
+      },
+    });
+  console.log(`[sync] Upserted ${summaries.length} activity summaries`);
 }
 
 /**

@@ -2,11 +2,13 @@
 
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
+import { readActivitySummaries } from "@/lib/sync/read";
 import SyncButton from "../components/sync-button";
 import AutoSync from "../components/auto-sync";
 import HeartCharts from "../components/heart-charts";
 import DateNavigator from "../components/date-navigator";
-import { localToday } from "@/lib/dates";
+import AzmTrendCard from "../components/azm-trend-card";
+import { localToday, addDays } from "@/lib/dates";
 
 function statusBadge(status: string): string {
   if (status === "Elevated Stress") return "bg-amber-100 text-amber-700";
@@ -21,16 +23,25 @@ export default async function HeartPage({
 }) {
   const session = await auth();
   if (!session?.user?.id) return null;
+  const userId = session.user.id;
 
   const params = await searchParams;
   const targetDate = params.date || localToday();
 
+  // AZM data is always anchored to today — independent of ?date=.
+  const today          = localToday();
+  const activityStart  = addDays(today, -89);
+
+  const [pageDataResult, activityResult] = await Promise.allSettled([
+    loadPageData(targetDate),
+    readActivitySummaries(userId, activityStart, today),
+  ]);
+
   let data: Awaited<ReturnType<typeof loadPageData>> | undefined;
-  try {
-    data = await loadPageData(targetDate);
-  } catch (error) {
-    console.error("Heart page error:", error);
-  }
+  if (pageDataResult.status === "fulfilled") data = pageDataResult.value;
+  else console.error("Heart page error:", pageDataResult.reason);
+
+  const activityRows = activityResult.status === "fulfilled" ? activityResult.value : [];
 
   const hasData    = data?.hasData === true;
   const heart      = hasData ? data!.heart : null;
@@ -66,6 +77,9 @@ export default async function HeartPage({
           <DateNavigator />
         </div>
       </div>
+
+      {/* AZM trend — always rendered; anchored to today regardless of ?date= */}
+      <AzmTrendCard rows={activityRows} />
 
       {!hasHeartData ? (
         <div className="rounded-[1.5rem] border border-dashed border-outline-variant bg-white p-12 text-center">

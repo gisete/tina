@@ -7,6 +7,7 @@ import type {
   GoogleHealthHeartRateDataPoint,
   GoogleHealthHrvDataPoint,
   GoogleHealthHeartRateSamplePoint,
+  GoogleZoneMinutePoint,
 } from "./normalizers";
 
 async function refreshGoogleAccessToken(userId: string, refreshToken: string) {
@@ -192,6 +193,25 @@ export async function fetchGoogleHeartData(
     heartRatePoints: heartRatePoints as GoogleHealthHeartRateDataPoint[],
     hrvPoints: hrvPoints as GoogleHealthHrvDataPoint[],
   };
+}
+
+/**
+ * Fetches intraday `time-in-heart-rate-zone` records (1 per minute the user is
+ * wearing the device) for a UTC physical-time window. Filters on
+ * `interval.start_time` (the only supported filter field for this type).
+ * Returns raw points; callers normalize via normalizeZoneRecords().
+ */
+export async function fetchGoogleZoneRecords(
+  userId: string,
+  startTimeISO: string,
+  endTimeISO: string,
+): Promise<GoogleZoneMinutePoint[]> {
+  const points = await fetchHealthDataType(userId, "time-in-heart-rate-zone", {
+    reconcile: true,
+    filter: `time_in_heart_rate_zone.interval.start_time >= "${startTimeISO}" AND time_in_heart_rate_zone.interval.start_time < "${endTimeISO}"`,
+    pageSize: 1000,
+  });
+  return points as GoogleZoneMinutePoint[];
 }
 
 /**
