@@ -48,6 +48,14 @@ export default async function DashboardLayout({
             <span>Heart Health</span>
           </Link>
 
+          <Link
+            href="/dashboard/plan"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
+          >
+            <span>📋</span>
+            <span>Plan</span>
+          </Link>
+
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-neutral-400 pointer-events-none select-none">
             <span>🏃‍♂️</span>
             <span>Exercise & Endurance</span>

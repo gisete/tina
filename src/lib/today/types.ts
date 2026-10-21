@@ -107,3 +107,25 @@ export interface TodayPlan {
   };
   meals: Record<MealSlot, TodayMealItem[]>;
 }
+
+// ── Plan editor payload ──────────────────────────────────────────────────────
+
+export interface MindsetItem {
+  id: number;
+  kind: MindsetKind;
+  text: string;
+  position: number;
+}
+
+export interface ConditionWithOptions extends Condition {
+  options: ConditionOption[];
+}
+
+/** Everything the plan editor renders, as plain serializable data. */
+export interface PlanData {
+  exercise: ExercisePlanItem[];
+  meals: MealPlanItem[];
+  conditions: ConditionWithOptions[];
+  mindset: MindsetItem[];
+  motivation: MotivationLine[];
+}

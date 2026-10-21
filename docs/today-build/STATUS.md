@@ -72,7 +72,38 @@ Carry-forward (non-blocking):
 ### Phase 2 -> Phase 3 decision: GO
 Criteria met, no unresolved blocking, diff in scope, Phase 1 commit defect repaired.
 
-## Phase 3 — Plan editor: OPEN
+## Phase 3 — Plan editor: DONE (UI click-through pending, see Q5)
+
+Gate (builder, re-run after fix round 1): tsc clean; build "Compiled successfully" with /dashboard/plan in route list; staged-snapshot tsc "STAGED TREE TSC OK". No schema change, no push.
+Verified by PM: `git diff --cached --stat` = 14 files, +1487: src/app/actions/plan.ts, dashboard/layout.tsx (+8, nav link), dashboard/plan/** (page + 6 components), src/lib/today/{index,persist,read,types,validate}.ts. Nothing in sleep/heart/scoring/sync staged; feelings.ts, night-*.tsx, feeling-tags.ts, schema.ts remain unstaged.
+
+DEVIATION D3: Chrome extension not connected, so "create items via the UI" was NOT done; UI only compiled/built. Instead the exact persist.ts + validate.ts functions the actions call were run against the live DB with throwaway users (all rows deleted, leftovers 0). Server Action auth path and revalidatePath not exercised live.
+Spot-check output (live DB): reorder Squats(0)/Run(1) then move Run up -> Squats 1, Run 0. Cross-user move/delete = no-op, insertConditionOption on another user's condition -> false. copyMealDayToAllDays -> 14 rows over weekdays 1..7. Condition 'Low energy' below 70 archived=true persisted (not deleted), option row kept. mindset_items 1, motivation_lines 1. Validation rejects weekday 8, "3", slot "brunch", kind "x", threshold 0/101/NaN, blank name; accepts weekday 7, snack, threshold null/70.
+
+Review: Round 1 one BLOCKING (copy-day from an empty source day could wipe all other days' meals on direct POST) -> FIXED (persist returns false before any write; action returns ok:false), verified live (empty source -> false, existing row kept; Tuesday source -> true, 7 rows). Round 2: no blocking, nothing new. Also fixed: mutate() try/catch, h1 token class.
+Not changed, justified: option ownership checked in a separate query (safe single-user; rename to ownsOption later); nextPosition race harmless (ties by id, moveWithin renumbers); one pending flag per section; stale error on tab switch; no move for conditions/options (not in SPEC).
+
+Open question:
+- Q5. Gisete: click through /dashboard/plan once (add a workout, add a meal, create then archive a condition, copy a meal day to all days) as the real UI verification.
+
+Carry-forward to Phase 4:
+- (a) copy-to-all-days deletes and recreates other days' meal_plan_items, setting meal_logs.meal_plan_item_id NULL for logs on those days; for today/yesterday a logged meal could show next to a fresh unlogged copy. Phase 4 must match orphaned logs to template items (slot + description snapshot) or otherwise avoid duplicates.
+- (b) meal_logs null-FK rows are not deduped by the unique index.
+- (c) Phase 4/5 readers must filter archived conditions/options (nudge already skips archived).
+- (d) Validate date format before isoWeekdayOf.
+- Plus earlier: NULL steps = no data; sign-in redirectTo and mobile nav.
+
+### Phase 3 -> Phase 4 decision: GO
+Gate green, scope clean, blocking finding fixed and re-reviewed, DB-level checks pass. UI click-through is an accepted, recorded gap (Q5), not blocking since logic is live-verified and UI is thin.
+
+## Phase 4 — Today screen + logging: OPEN
+
+Criteria (SPEC Phase 4): new Today route as landing (update sign-in redirectTo; sleep/heart stay in nav; consider mobile nav). Blocks: motivation line; today's workout (checkable items) with "Not feeling great?" listing active (non-archived) conditions, tap shows options (multi-select), logs status 'backup' with options snapshotted; Skip; meal plan by slot with check-off; mantras; collapsible strategies via shared expandable-card; steps (yesterday primary, today "so far", NULL = no data); compact last-night Sleep Score card linking to sleep page. Logging limited to today/yesterday with toggle; server action validates date format first, then that it is one of the two (local date helpers). Last-night score from stored data only: no lazy HR fetch, no Google call; cardiac=null with "partial" indicator when samples uncached; "Not synced yet" when no session. Same stale-view auto-sync trigger as sleep page.
+Spot-checks: log planned workout, edit weekday template, confirm log row keeps old text (SQL); log a backup and print row; check off a meal, delete the template item, confirm log row keeps description_snapshot. Add: copy-to-all-days then confirm no duplicate of a logged meal (carry-forward a/b); archived conditions/options not shown. Gate: tsc, build, staged-snapshot tsc.
+
+Status: open, awaiting implementation.
+
+## Phase 3 criteria (archived)
 
 Criteria (SPEC): plan page linked from nav with sections: Weekly workouts (weekday tabs, add/edit/reorder/delete), Meal plan (weekday tabs, by slot, "copy this day to all days"), Backup conditions (create/rename/archive, optional sleep-score-below threshold, manage options), Mantras & strategies, Motivation lines. Server actions orchestrate only (auth -> validate -> persist -> revalidate); DB writes in new src/lib/today/persist.ts; validation pure in src/lib (must enforce weekday 1..7 and status/slot/kind enums). Existing token classes and card/expand components, no raw palette values.
 Spot-checks: create items via the UI then SQL-select them; archive a condition and confirm the row persists with archived=true. Gate: tsc, build, staged-snapshot tsc.
