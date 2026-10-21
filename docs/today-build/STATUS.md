@@ -27,7 +27,9 @@ Pre-existing dirty working tree: see Q1.
 
 Server tz matches Europe/Lisbon (no STOP condition). Steps data type exists. Deviations from SPEC: none beyond D1. Phase 4 must also change the sign-in redirectTo and consider mobile nav (noted for later phases).
 
-## Phase 1 — Daily steps (sync path only): DONE
+## Phase 1 — Daily steps (sync path only): DONE, with commit defect fixed in Phase 2
+
+**DEFECT (commit c322cbb):** the committed src/db/schema.ts has `steps: integer("steps")` placed INSIDE the usersRelations object instead of the dailyActivitySummaries columns (zero-context partial patch via `git apply --cached --unidiff-zero`). The Phase 1 gate ran on the working tree (correct), so tsc/build/push/live-DB checks passed, but HEAD did not match what was tested. Caught by the Phase 2 reviewer, confirmed with `git show HEAD:src/db/schema.ts`. Fixed by the Phase 2 commit (content-built schema.ts). PROCESS CHANGE: typecheck the STAGED snapshot (checkout-index into a temp tree) before every commit.
 
 Gate (builder's reported output, re-run after final edit): `npx tsc --noEmit` clean ("TSC OK"); `npm run build` "Compiled successfully", all routes listed; `npx drizzle-kit push` "[✓] Changes applied", no data-loss/drop/rename prompts. Push also applied the pre-existing daily_feeling_tags schema (not Phase 1 work, additive).
 
@@ -48,7 +50,32 @@ Open questions:
 ### Phase 1 -> Phase 2 decision: GO
 All sign-off checks satisfied; the two caveats are recorded, not blocking (unit pieces proven live; route wiring is a thin Promise.allSettled addition).
 
-## Phase 2 — Schema + pure engines: OPEN
+## Phase 2 — Schema + pure engines: DONE
+
+Gate (builder): tsc clean; build "Compiled successfully"; `drizzle-kit push` "[✓] Changes applied", no data-loss/rename/drop prompts (8 new tables only). Staged snapshot typechecked separately: "STAGED TREE TSC OK".
+Verified by PM: `git diff --cached --stat` = schema.ts (+110/-3, includes steps relocation fix), src/lib/today/{index,motivation,resolve-day,sleep-nudge,types,weekday}.ts, scripts/today-engines-check.ts; nothing else staged. daily_feeling_tags remains unstaged.
+Spot-checks (scripts/today-engines-check.ts, ALL CHECKS PASSED under Europe/Lisbon, America/Los_Angeles, Pacific/Auckland, UTC):
+1. Weekday: Sun 2026-10-18 -> 7, Mon 2026-10-19 -> 1 (still 7 under LA where new Date("2026-10-18") would be Saturday).
+2. Motivation: 14 dates -> 4,2,5,1,2,4,5,1,2,4,5,1,1,5; empty -> null; stable across calls/input order; inactive line never picked.
+3. Backup round-trip: {"kind":"backup","conditionId":7,"conditionName":"Low energy","items":[{"name":"Walk","details":"15 min","done":false}]}; snapshot wins over edited template; JSON-safe. Meals: logged breakfast keeps "Oats" after template edit to "Eggs"; null-id orphan lunch still listed.
+4. Nudge: null -> []; 64 vs threshold 70 -> [1]; 70 -> [] (strictly below; archived/null-threshold excluded).
+Review (code-reviewer): No blocking findings.
+
+Deviation D2: ExerciseLogState backup.conditionId is `number | null` (FK nullable); conditionName falls back to "Backup" if snapshot null.
+
+Carry-forward (non-blocking):
+- Phase 3: validate status/slot/kind (text with $type) and weekday 1..7 in pure validation.
+- Phase 4: meal_logs upsert must only target rows with non-null meal_plan_item_id (unique index treats NULLs as distinct); server action must validate date format before isoWeekdayOf (NaN on malformed input); NULL steps = no data in UI.
+- Add relations/user_id indexes for new tables only if needed.
+- Accepted low risk: DayTemplates may hold all weekdays (resolveDay filters); script does not test a meal item moved to another weekday.
+
+### Phase 2 -> Phase 3 decision: GO
+Criteria met, no unresolved blocking, diff in scope, Phase 1 commit defect repaired.
+
+## Phase 3 — Plan editor: OPEN
+
+Criteria (SPEC): plan page linked from nav with sections: Weekly workouts (weekday tabs, add/edit/reorder/delete), Meal plan (weekday tabs, by slot, "copy this day to all days"), Backup conditions (create/rename/archive, optional sleep-score-below threshold, manage options), Mantras & strategies, Motivation lines. Server actions orchestrate only (auth -> validate -> persist -> revalidate); DB writes in new src/lib/today/persist.ts; validation pure in src/lib (must enforce weekday 1..7 and status/slot/kind enums). Existing token classes and card/expand components, no raw palette values.
+Spot-checks: create items via the UI then SQL-select them; archive a condition and confirm the row persists with archived=true. Gate: tsc, build, staged-snapshot tsc.
 
 ### Acceptance criteria (from SPEC)
 - New additive tables in src/db/schema.ts, all scoped by user_id, applied via `npx drizzle-kit push`: exercise_plan_items, meal_plan_items, conditions (archived, never hard-deleted; sleep_score_below nullable), condition_options, mindset_items, motivation_lines, exercise_day_logs (uniqueIndex user_id+date; items jsonb snapshot; condition_name_snapshot), meal_logs (uniqueIndex user_id+date+meal_plan_item_id; FK set null on delete; description_snapshot). Snapshot rule: edits to templates never alter past logs.

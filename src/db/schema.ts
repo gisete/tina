@@ -1,7 +1,8 @@
-import { pgTable, uuid, text, timestamp, integer, real, date, pgEnum, uniqueIndex, index, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, real, date, pgEnum, uniqueIndex, index, jsonb, serial, smallint, boolean } from "drizzle-orm/pg-core";
 import { primaryKey } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
+import type { ExerciseLogStatus, LoggedExerciseItem, MealSlot, MindsetKind } from "@/lib/today/types";
 
 export const sleepStageEnum = pgEnum("sleep_stage_type", ["deep", "light", "rem", "awake"]);
 
@@ -79,6 +80,8 @@ export const dailyActivitySummaries = pgTable(
     moderateMinutes: integer("moderate_minutes").notNull().default(0),
     vigorousMinutes: integer("vigorous_minutes").notNull().default(0),
     peakMinutes: integer("peak_minutes").notNull().default(0),
+    /** Daily step total; nullable until a steps sync has run for the day. */
+    steps: integer("steps"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -93,8 +96,6 @@ export const usersRelations = relations(users, ({ many }) => ({
   heartRateSamples: many(heartRateSamples),
   dailyActivitySummaries: many(dailyActivitySummaries),
 }));
-    /** Daily step total; nullable until a steps sync has run for the day. */
-    steps: integer("steps"),
 
 export const heartRateSamplesRelations = relations(heartRateSamples, ({ one }) => ({
   user: one(users, { fields: [heartRateSamples.userId], references: [users.id] }),
@@ -182,3 +183,106 @@ export const heartRateSummariesRelations = relations(heartRateSummaries, ({ one 
 export const dailyActivitySummariesRelations = relations(dailyActivitySummaries, ({ one }) => ({
   user: one(users, { fields: [dailyActivitySummaries.userId], references: [users.id] }),
 }));
+
+// ── Today: plan templates ────────────────────────────────────────────────────
+
+export const exercisePlanItems = pgTable(
+  "exercise_plan_items",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    /** ISO weekday: 1 = Monday … 7 = Sunday. */
+    weekday: smallint("weekday").notNull(),
+    position: integer("position").notNull().default(0),
+    name: text("name").notNull(),
+    /** Free text, e.g. "3×12" or "20 min". */
+    details: text("details"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("exercise_plan_items_user_id_weekday_idx").on(t.userId, t.weekday)]
+);
+
+export const mealPlanItems = pgTable(
+  "meal_plan_items",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    weekday: smallint("weekday").notNull(),
+    slot: text("slot").$type<MealSlot>().notNull(),
+    position: integer("position").notNull().default(0),
+    description: text("description").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("meal_plan_items_user_id_weekday_idx").on(t.userId, t.weekday)]
+);
+
+/** Backup-workout conditions. Archived, never deleted: logs reference them. */
+export const conditions = pgTable("conditions", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  position: integer("position").notNull().default(0),
+  sleepScoreBelow: smallint("sleep_score_below"),
+  archived: boolean("archived").notNull().default(false),
+});
+
+export const conditionOptions = pgTable("condition_options", {
+  id: serial("id").primaryKey(),
+  conditionId: integer("condition_id").references(() => conditions.id).notNull(),
+  name: text("name").notNull(),
+  details: text("details"),
+  position: integer("position").notNull().default(0),
+  archived: boolean("archived").notNull().default(false),
+});
+
+export const mindsetItems = pgTable("mindset_items", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  kind: text("kind").$type<MindsetKind>().notNull(),
+  text: text("text").notNull(),
+  position: integer("position").notNull().default(0),
+});
+
+export const motivationLines = pgTable("motivation_lines", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  text: text("text").notNull(),
+  active: boolean("active").notNull().default(true),
+});
+
+// ── Today: logs (snapshots of the plan as it was at log time) ────────────────
+
+export const exerciseDayLogs = pgTable(
+  "exercise_day_logs",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    date: date("date").notNull(),
+    status: text("status").$type<ExerciseLogStatus>().notNull(),
+    conditionId: integer("condition_id").references(() => conditions.id),
+    conditionNameSnapshot: text("condition_name_snapshot"),
+    items: jsonb("items").$type<LoggedExerciseItem[]>().notNull().default([]),
+    note: text("note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("exercise_day_logs_user_id_date_idx").on(t.userId, t.date)]
+);
+
+export const mealLogs = pgTable(
+  "meal_logs",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    date: date("date").notNull(),
+    mealPlanItemId: integer("meal_plan_item_id").references(() => mealPlanItems.id, { onDelete: "set null" }),
+    slot: text("slot").$type<MealSlot>().notNull(),
+    descriptionSnapshot: text("description_snapshot").notNull(),
+    followed: boolean("followed").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("meal_logs_user_id_date_meal_plan_item_id_idx").on(t.userId, t.date, t.mealPlanItemId)]
+);
