@@ -2,6 +2,31 @@
 
 Source of truth: docs/today-build/SPEC.md. Owner of this file: project-manager.
 
+## FINAL SUMMARY — decision: GO (build complete, all 5 phases signed off)
+
+Per phase:
+- Phase 1 Daily steps: DONE (commit c322cbb had a misplaced schema.ts column; repaired in Phase 2 commit).
+- Phase 2 Schema + pure engines: DONE.
+- Phase 3 Plan editor: DONE (1 blocking fixed, re-reviewed).
+- Phase 4 Today screen + logging: DONE (2 blocking fixed, re-reviewed).
+- Phase 5 Sleep nudge: DONE (0 blocking).
+All gates (tsc, build, staged-snapshot tsc, engines check across timezones) green at each phase; no schema data-loss prompts.
+
+Deviations:
+- D1. project-manager/code-reviewer agents not registered; ran as general-purpose with prompt-enforced restrictions.
+- D2. ExerciseLogState backup.conditionId is number | null (nullable FK), name falls back to "Backup".
+- D3/D4. UI never clicked (Chrome extension not connected): /dashboard/plan and /dashboard/today only compiled/typechecked; Server Actions' auth/revalidate path and real page render not run live. Logic verified via the same persist/pure functions against the live DB with throwaway users (cleaned up).
+- Phase 1 commit defect: HEAD schema.ts mismatched tested tree; fixed in Phase 2; process change = staged-snapshot typecheck before each commit.
+
+Consolidated open questions for Gisete:
+1. Click through /dashboard/plan (add workout/meal, create+archive condition, copy meal day to all days) and /dashboard/today (check items, backup flow, meal check-off, Yesterday tab, sign-in redirect). Create at least one condition with a sleep-score threshold to see the nudge.
+2. Open /api/sync?days=7 logged in (or press Sync) to verify the live steps wiring (Q3).
+3. First Today auto-sync covers only 3 days (DB last synced 2026-07-18); older nights need /api/sync?days=N. Last-night card shows "Not synced yet" until then.
+4. Pre-existing uncommitted work left uncommitted (feeling tags, sleep page, hypnogram, sleep-score-card, stage-colors, format.ts, feelings.ts, night-*.tsx, feeling-tags.ts, settings.local.json); commit it yourself (Q1).
+5. AZM trend may show 0 for steps-only days 10-14..10-21 (Q4).
+6. Deploying in UTC would break localToday()/weekday logic around midnight; decide TZ before any deploy (Q2).
+7. No real conditions created yet, so the nudge has not been seen on real data.
+
 ## Deviations (top-level)
 
 - D1. The project-manager and code-reviewer agents were created in .claude/agents/ this session but are not registered as subagent types until Claude Code restarts. Both roles run as general-purpose agents given the exact definition prompts. Tool restrictions (read-only for reviewer; STATUS.md-only for PM) are prompt-enforced, not harness-enforced.
@@ -118,7 +143,16 @@ Open question:
 ### Phase 4 -> Phase 5 decision: GO
 Gate green, scope clean (unrelated work not staged), 2 blocking findings fixed and re-reviewed, DB-level checks pass, server-tz STOP did not trigger. UI/auth gap recorded (D4/Q6), not blocking.
 
-## Phase 5 — Sleep nudge: OPEN
+## Phase 5 — Sleep nudge: DONE (final phase; real DB has no conditions and last night not-synced, so nudge not visible live)
+
+Gate (builder, re-run after final edit): tsc clean; build "Compiled successfully"; staged-snapshot "STAGED TREE TSC OK"; scripts/today-engines-check.ts ALL CHECKS PASSED (Europe/Lisbon, Pacific/Auckland; reviewer also America/Los_Angeles). No schema change.
+Changes: buildSleepNudge(score, conditions) in src/lib/today/sleep-nudge.ts (pure; reuses conditionsToHighlight: strict <, archived/null-threshold excluded, null score -> null) -> {score, conditionIds, message:"Last night scored N, consider this."}. Today page computes it from the stored last-night score (no Google) over shown (non-archived) conditions; DayPanel passes it to Today tab only; WorkoutBlock shows the line and styles suggested chips (token fill, bold, aria-hidden marker plus sr-only text, not color-only). Suggestion only: never selects/opens/swaps/logs.
+Spot-checks (builder output): fixtures null -> null; 80 -> null; 64 vs {70,null,70 archived,60} -> conditionIds [1] with message; 55 -> [1,4]; 70 -> [] (strict). REAL DB (read-only): no conditions created yet; last night {"kind":"not-synced"} -> nudge null, so nothing highlighted on real data right now. AS-IF (hypothetical thresholds 70/80, stored July nights, past "today"): night 07-17 score 81 -> null; night 07-16 score 75 (partial) -> {"score":75,"conditionIds":[2],...}.
+Review: BLOCKING none; all spec points confirmed. Non-blocking applied: sr-only text. Not changed: message does not name the chip (highlight carries it); suggested vs selected chip similarity (aria-pressed distinguishes). Fix rounds: 0.
+
+### Phase 5 decision: GO. BUILD COMPLETE.
+
+## Phase 5 criteria (archived)
 
 Criteria (SPEC): on Today, when last night's score is below a condition's threshold, visually highlight that condition with a line like "Last night scored 64, consider this." Suggestion only, never auto-swap (no automatic status change/backup log). Use pure sleep-nudge.ts with the Phase 4 last-night score (stored data only, no Google call); null/not-synced score -> no highlight; archived conditions excluded; strictly-below threshold.
 Spot-checks: (1) fixture-check via sleep-nudge.ts (null -> none; 64 vs 70 -> highlighted; 70 -> none; archived excluded); (2) on the real DB report last night's score and which conditions (if any) would be highlighted; note that the live last night is currently "not-synced", so also report the as-if scored case and state which it is. Gate: tsc, build, staged-snapshot tsc; diff limited to Today UI/lib, nothing unrelated staged.

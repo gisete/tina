@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { logBackupWorkout, resetWorkout, skipWorkout, toggleWorkoutItem } from "@/app/actions/today";
 import type { ConditionWithOptions, TodayPlan } from "@/lib/today/types";
+import type { SleepNudge } from "@/lib/today/sleep-nudge";
 import { ErrorLine, useRun } from "../../plan/components/plan-ui";
 
 export function CheckRow({
@@ -44,10 +45,13 @@ const SECONDARY_BTN =
 export default function WorkoutBlock({
   plan,
   conditions,
+  nudge,
   title,
 }: {
   plan: TodayPlan;
   conditions: ConditionWithOptions[];
+  /** Today-only sleep suggestion; highlights chips but never selects one. */
+  nudge: SleepNudge | null;
   title: string;
 }) {
   const { date, exercise } = plan;
@@ -107,21 +111,29 @@ export default function WorkoutBlock({
       {conditions.length > 0 && (
         <div className="mt-5 pt-4 border-t border-outline-variant/50">
           <h3 className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">Not feeling great?</h3>
+          {nudge && <p className="text-sm font-semibold text-on-surface mb-2">{nudge.message}</p>}
           <div className="flex flex-wrap gap-2">
-            {conditions.map((c) => (
-              <button
-                key={c.id}
-                aria-pressed={openConditionId === c.id}
-                onClick={() => chooseCondition(c.id)}
-                className={`px-3 py-2 rounded-xl border text-sm transition-colors ${
-                  openConditionId === c.id
-                    ? "bg-on-surface text-white border-on-surface"
-                    : "bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container"
-                }`}
-              >
-                {c.name}
-              </button>
-            ))}
+            {conditions.map((c) => {
+              const suggested = nudge?.conditionIds.includes(c.id) ?? false;
+              return (
+                <button
+                  key={c.id}
+                  aria-pressed={openConditionId === c.id}
+                  onClick={() => chooseCondition(c.id)}
+                  className={`px-3 py-2 rounded-xl border text-sm transition-colors ${
+                    openConditionId === c.id
+                      ? "bg-on-surface text-white border-on-surface"
+                      : suggested
+                        ? "bg-primary-container text-on-surface border-on-surface font-semibold"
+                        : "bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-container"
+                  }`}
+                >
+                  {suggested && <span aria-hidden>✦ </span>}
+                  {c.name}
+                  {suggested && <span className="sr-only"> (suggested based on last night&apos;s sleep score)</span>}
+                </button>
+              );
+            })}
           </div>
 
           {openCondition && (

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ConditionWithOptions, TodayPlan } from "@/lib/today/types";
+import type { SleepNudge } from "@/lib/today/sleep-nudge";
 import WorkoutBlock from "./workout-block";
 import MealBlock from "./meal-block";
 
@@ -19,9 +20,11 @@ const TABS: ReadonlyArray<{ key: DayKey; label: string }> = [
 export default function DayPanel({
   days,
   conditions,
+  nudge,
 }: {
   days: Record<DayKey, TodayPlan>;
   conditions: ConditionWithOptions[];
+  nudge: SleepNudge | null;
 }) {
   const [day, setDay] = useState<DayKey>("today");
   const plan = days[day];
@@ -45,7 +48,7 @@ export default function DayPanel({
         ))}
       </div>
 
-      <WorkoutBlock key={`w-${plan.date}`} plan={plan} conditions={conditions} title={`${noun} workout`} />
+      <WorkoutBlock key={`w-${plan.date}`} plan={plan} conditions={conditions} nudge={day === "today" ? nudge : null} title={`${noun} workout`} />
       <MealBlock key={`m-${plan.date}`} plan={plan} title={`${noun} meals`} />
     </div>
   );

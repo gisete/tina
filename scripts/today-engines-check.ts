@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import {
   isoWeekdayOf, resolveDay, pickMotivationLine, conditionsToHighlight,
-  validateLogDate, loggableDates, isSyncStale, plannedItemsFor, toggleExerciseItem, buildBackupLog, skippedExerciseLog,
+  buildSleepNudge, validateLogDate, loggableDates, isSyncStale, plannedItemsFor, toggleExerciseItem, buildBackupLog, skippedExerciseLog,
   type ConditionOption,
   type ExercisePlanItem, type MealPlanItem, type MotivationLine, type ExerciseDayLog, type MealLog,
 } from "@/lib/today";
@@ -124,4 +124,11 @@ assert.equal(isSyncStale(null, 1e12, 6), true);
 assert.equal(isSyncStale(1e12 - 5 * 3_600_000, 1e12, 6), false);
 assert.equal(isSyncStale(1e12 - 7 * 3_600_000, 1e12, 6), true);
 console.log("log window ok; rejected: 2026-10-19, 2026-10-22, malformed, non-string");
+
+// 9. Phase 5 nudge.
+assert.equal(buildSleepNudge(null, conds), null);
+assert.equal(buildSleepNudge(80, conds), null); // above every threshold
+assert.deepEqual(buildSleepNudge(64, conds), { score: 64, conditionIds: [1], message: "Last night scored 64, consider this." });
+assert.deepEqual(buildSleepNudge(55, conds)?.conditionIds, [1, 4]); // archived 3 and null-threshold 2 never
+console.log("nudge 64 →", JSON.stringify(buildSleepNudge(64, conds)), "| 55 →", buildSleepNudge(55, conds)?.conditionIds);
 console.log("ALL CHECKS PASSED");

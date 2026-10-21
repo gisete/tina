@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { addDays, localToday } from "@/lib/dates";
-import { isSyncStale, pickMotivationLine, resolveDay, TODAY_STALE_AFTER_HOURS } from "@/lib/today";
+import { buildSleepNudge, isSyncStale, pickMotivationLine, resolveDay, TODAY_STALE_AFTER_HOURS } from "@/lib/today";
 import {
   readExerciseLog,
   readLastNightScore,
@@ -50,6 +50,10 @@ export default async function TodayPage() {
     .map((c) => ({ ...c, options: c.options.filter((o) => !o.archived) }))
     .filter((c) => c.options.length > 0);
 
+  // Suggestion only: highlights conditions whose sleep-score threshold last
+  // night's stored score fell below. Only shown conditions can be nudged.
+  const nudge = buildSleepNudge(lastNight.kind === "scored" ? lastNight.score : null, conditions);
+
   const motivation = pickMotivationLine(today, plan.motivation);
   const shouldAutoSync = isSyncStale(lastSyncedMs, Date.now(), TODAY_STALE_AFTER_HOURS);
 
@@ -64,7 +68,7 @@ export default async function TodayPage() {
         <p className="font-display text-lg font-semibold text-on-surface tracking-tight">{motivation.text}</p>
       )}
 
-      <DayPanel days={days} conditions={conditions} />
+      <DayPanel days={days} conditions={conditions} nudge={nudge} />
 
       <Mantras items={plan.mindset.filter((m) => m.kind === "mantra")} />
       <Strategies items={plan.mindset.filter((m) => m.kind === "strategy")} />
