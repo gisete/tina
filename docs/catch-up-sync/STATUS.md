@@ -83,3 +83,57 @@ Spot-checks (npx tsx fixtures, real output must be recorded):
 - Plus: the derived synced_through for the real row reported.
 
 Phase 1 sign-off will additionally require: actual tsc/build output, real spot-check output, no unresolved BLOCKING review findings, git diff --stat limited to schema.ts (sync_state only), src/lib/sync/catch-up.ts, and any init script (excluding the pre-existing unrelated files).
+
+## Phase 1: schema + pure planner
+
+Status: DONE. Decision: GO to Phase 2.
+
+### PM-verified (read-only, this session)
+- `git diff --cached --stat`: exactly 5 files, 317 insertions: scripts/catch-up-check.ts (142), scripts/init-synced-through.ts (52), src/db/schema.ts (+8), src/lib/dates.ts (+11), src/lib/sync/catch-up.ts (104). Nothing else staged.
+- `git diff --cached src/db/schema.ts`: single hunk in sync_state: `syncedThrough: date("synced_through")` and `lockUntil: timestamp("lock_until")`, both nullable, additive. The unrelated pre-existing unstaged schema.ts edit is not staged.
+- Untouched: no staged or modified files under src/lib/scoring, src/lib/analytics (only an untracked pre-existing feeling-tags.ts, unrelated), src/app/actions/sync.ts, src/lib/google/. Scope guard respected.
+- Re-ran `TZ=Europe/Lisbon npx tsx scripts/catch-up-check.ts`: "ALL CHECKS PASSED (TZ=Europe/Lisbon)"; advanceCursor outputs: gap-before-recent = 2026-07-18, contiguous chunk = 2026-08-01, after fill = 2026-10-21; deriveSyncedThrough (live-shaped) = 2026-07-18; null cursor = recent only, stays null.
+- Re-ran `npx tsc --noEmit`: clean (exit 0).
+
+### Builder-reported (not PM-verified; PM has no DB access)
+- `npx drizzle-kit push`: "[✓] Changes applied", no data-loss/rename/drop prompt. Adds sync_state.synced_through (date, nullable) and lock_until (timestamp, nullable).
+- Init script dry-run: user 622a1594-...: today=2026-10-21 covered_days=117 last_synced_at=2026-10-21 20:24:35 current_synced_through=null derived=2026-07-18. `--write`: "wrote synced_through=2026-07-18". Equals SPEC expectation; not later than 2026-10-13, so the STOP rule is not triggered. Coverage rule (Q1 as proposed): sleep_sessions.sleep_date, heart_rate_summaries.date, or activity row with non-zero zone minutes; steps-only default-0 rows excluded.
+- `npm run build` succeeded; staged-tree tsc (checkout-index to temp tree) OK after last edit.
+- Fixtures ALL PASSED under Europe/Lisbon, America/Los_Angeles, Pacific/Auckland, UTC: gap 0 -> recent 2026-10-18..2026-10-21 (4 days), 0 chunks; gap 2 -> 0 chunks (syncedThrough=today-4 also 0; today-5 -> one chunk 10-17..10-17); gap 95 (synced 2026-07-14) -> 7 chunks 07-15..07-28, 07-29..08-11, 08-12..08-25, 08-26..09-08, 09-09..09-22, 09-23..10-06, 10-07..10-17 (11 days), total 95, no overlap, no hole; DST: synced 2026-10-20, today 2026-11-12 -> 10-21..11-03 (14) | 11-04..11-08 (5), tiling checks across NZ/EU/US DST dates.
+- Review (general-purpose stand-in): BLOCKING none. Non-blocking: chunkDays<=0 infinite loop FIXED (Math.max(1, chunkDays), gates re-run); other items carried to Phase 2 below. Fix rounds used: 0 of 2.
+
+### Deviations
+- D1: agents unregistered; run as general-purpose per .claude/agents/*.md (as in Phase 0).
+- D2: SPEC says gap chunks cover syncedThrough+1 .. today-RECENT_WINDOW_DAYS; builder ends the gap at recent.from-1 = today-4, because the recent window is today-3..today (4 civil days, same as runGoogleSync always fetched). Chunks never overlap the recent window; consistent with the cursor rule. PM accepts (SPEC's literal text would double-fetch today-3).
+- D3: scripts/init-synced-through.ts committed as a reproducible one-off; never overwrites a non-null value; DB row written via --write.
+- Addition outside SPEC list: diffDays() in src/lib/dates.ts (UTC-component arithmetic, DST-proof); no day-difference helper existed. Accepted.
+- Null syncedThrough behavior (stated): a single recent window only (the existing 3-day reconcile behavior), no gap chunks.
+
+### Decision: GO to Phase 2
+
+## Next phase criteria: Phase 2 (Sync-step endpoint)
+
+Acceptance criteria (from SPEC):
+- One endpoint (follow repo conventions for route vs action) performing ONE unit of work per call: acquire lock (TTL about 2 min; held and unexpired -> busy) -> next unit (recent window if stale per the existing 6h rule, else the next gap chunk) -> persist via existing sync persist code -> update synced_through via advanceCursor only after the chunk fully succeeds -> release lock -> return union: { kind: 'idle' } | { kind: 'running', from, to, daysDone, daysTotal } | { kind: 'busy' } | { kind: 'auth_required' } | { kind: 'error', message }.
+- Cursor rule: advances contiguously; chunk [from,to] sets synced_through = to only if from <= synced_through + 1. Recent window must not advance it while a gap exists before it; once the gap is filled the recent window advances it to today.
+- Auth failure (expired/revoked refresh token) returns auth_required, never generic error.
+- last_synced_at keeps its meaning and still drives the 6h staleness rule.
+- Existing manual Sync button and /api/sync?days=N keep working; the Sync button uses the same step logic.
+- Scope guard: no scoring/analytics/lazy-HR/AZM-mapping changes. Layering: orchestration only in the action/route; pure logic in src/lib; DB writes in persist.ts. tsc and build pass.
+
+Carry-forward (must be satisfied; PM will check each):
+- From Phase 0: (i) catch-up path must NOT call ensureNightSamples; extract/parameterise the runGoogleSync core without it (legacy path unchanged). (ii) A chunk advances the cursor only if ALL fetches (sleep, heart, zones, steps) succeed; no warn-and-continue in the catch-up path. (iii) Fetch zones in sub-windows of <= 7 days (fetchHealthDataType silently caps at MAX_PAGES=20). (iv) Chunk bounds from civil dates (local midnight), not `new Date()` UTC instants. (v) Classify auth failures (invalid_grant in the refresh body, "No refresh token available.", linked-session errors, "Unauthorized") as auth_required via a typed error in client.ts or message inspection. (vi) Existing 6h staleness rule drives the recent window. (vii) Steps-only rows 2026-10-14..10-17 must end with real AZM after catch-up.
+- From Phase 1 review: (viii) only pass chunk ends <= today to advanceCursor (it can move the cursor into the future otherwise). (ix) null synced_through means "gap tracking off"; never set it from null in app code (only the init script does); null -> recent window only, cursor untouched. (x) lock_until must be released on every exit path, including errors and auth failures (try/finally), and acquisition must be atomic (single conditional UPDATE/upsert), so concurrent calls cannot both win.
+- Q2/Q3 from Phase 0 (sub-windowed zones; all-fetches-must-succeed) are treated as accepted since the SPEC and builder instruction already demand them; Gisete may object at any time.
+
+Spot-checks (real output must be recorded; DB results builder-reported, PM has no DB access):
+1. Call the endpoint repeatedly against the real DB until idle; report every response (kind, from, to, daysDone/daysTotal).
+2. SELECT counts of sleep_sessions and daily_activity_summaries per month for Jul-Oct, and the sync_state row (synced_through should equal today).
+3. Concurrency: two simultaneous calls; one must return busy.
+4. Re-query daily_activity_summaries for 2026-10-14..10-17: previously default-0 AZM, must now hold API values. Report as-is (light-minutes mapping is a known open question; do not fix).
+5. Auth path: demonstrate (by unit fixture or forced error) that invalid_grant and "No refresh token available." map to auth_required.
+6. Regression: /api/sync?days=3 and the Sync button still work; legacy path still calls ensureNightSamples, catch-up path does not (grep evidence).
+7. AZM integrity re-check: persist.ts upserts unchanged (git diff on persist.ts shows no change to conflict sets).
+8. Lock released after an induced failure (lock_until null or past after the call).
+
+Phase 2 sign-off requires: tsc/build output, spot-check outputs above, no unresolved BLOCKING review findings, git diff --stat limited to the sync action/route, catch-up/sync lib files, optional client.ts typed error, and sync_state-related files (excluding pre-existing unrelated files), max two fix rounds.

@@ -114,6 +114,14 @@ export const sleepStagesRelations = relations(sleepStages, ({ one }) => ({
 export const syncState = pgTable("sync_state", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   lastSyncedAt: timestamp("last_synced_at").notNull(),
+  /**
+   * Latest local date ("YYYY-MM-DD") up to which synced coverage is
+   * contiguous. Unlike last_synced_at (when a sync last ran), this only
+   * advances when no older day is missing. Null = not tracked yet.
+   */
+  syncedThrough: date("synced_through"),
+  /** Catch-up step lock: another step may start only after this instant. */
+  lockUntil: timestamp("lock_until"),
 });
 
 export const syncStateRelations = relations(syncState, ({ one }) => ({
