@@ -1,5 +1,51 @@
 # Catch-up sync: STATUS
 
+## FINAL SUMMARY (Phases 0-3 all signed off: GO)
+
+Result: the app now catches up missing days automatically. On a full page load of any dashboard page, one layout-level component loops POST /api/sync/step (one unit of work per call: the recent window when stale per the 6h rule, otherwise the next 14-day gap chunk) and shows a "Catching up: MM/DD -> MM/DD, X of Y days" banner with a progress bar. On the real DB the gap 2026-07-19..2026-10-21 was filled (91 days) and the cursor `sync_state.synced_through` ended at 2026-10-21.
+
+### Per-phase result
+| Phase | Commit | Result |
+|---|---|---|
+| P0 investigation | 9982ab3 | GO. AZM hard gate passed (AZM upsert always overwrites; steps upsert touches only steps). No code changed. |
+| P1 schema + pure planner | c87590c | GO. `sync_state.synced_through` (date) and `lock_until` (timestamp) added via drizzle-kit push; pure planner `src/lib/sync/catch-up.ts`; synced_through derived as 2026-07-18. |
+| P2 sync-step endpoint | ce8e4ba | GO. POST /api/sync/step with atomic lock, contiguous cursor, typed auth errors, <=7-day zone windows, all-fetches-must-succeed. |
+| P3 UI | next commit "catch-up: phase 3 — UI" (not yet created at sign-off; 12 files staged) | GO. Layout-level `CatchUpSync` + pure state machine `src/lib/sync/catch-up-banner.ts`; five per-page AutoSync triggers and auto-sync.tsx removed; Reconnect Google server action; Retry banner. |
+
+### Deviations (all accepted)
+- D1: project-manager/code-reviewer agents unregistered; run as general-purpose following .claude/agents/*.md (reviews were stand-ins). Fix rounds used: P1 0, P2 0, P3 1 (of 2 each).
+- D2: gap chunks end at today-4 (recent window is today-3..today, 4 days), not the SPEC's literal today-3, to avoid double-fetching a day.
+- D3: scripts/init-synced-through.ts committed as a reproducible one-off (never overwrites a non-null value).
+- Added `diffDays()` to src/lib/dates.ts (no day-difference helper existed).
+- D4: additive `unit` field on the 'running' wire result.
+- D5: the recent window does not call ensureNightSamples (SPEC), so Today's last-night HR-sample score can read "partial" until the sleep page is opened.
+- D6: syncFromGoogle() with no `days` (Sync button) is now one forced recent step, all-or-nothing, no ensureNightSamples; /api/sync?days=N is the unchanged legacy path.
+- D7: sync-button.tsx got a try/catch.
+- D8: router.refresh() on idle runs only if a unit ran or the lock was seen busy during that loop (a plain idle first call does not refresh). Reviewer accepted.
+- D9: Phase 3 live click-through used a 60-day setback (and a 30-day one) instead of only 30, and DOM text instead of screenshots (all screenshot calls timed out with "Script injection timed out").
+- D10: CatchUpSync is mounted in the layout, so it runs once per full page load, not on client-side navigation.
+- Left in place on purpose: loadPageData still returns an unused `shouldAutoSync` flag and `readLastSyncedAtMs` is unused (avoids touching the read path); sync-button.tsx keeps its pre-existing `bg-white`.
+
+### Open questions for Gisete
+1. Coverage rule used to derive synced_through: sleep session, heart summary, or a non-zero-AZM activity row. Derived 2026-07-18; the loop then filled 07-19..10-21. Right rule?
+2. Zone fetches use 7-day sub-windows because Google paging silently caps at 20 pages. Acceptable?
+3. A chunk advances the cursor only if all fetches succeed (stricter than the old warn-and-continue). The Sync button now fails with nothing visible on a partial failure. Acceptable?
+4. The server timezone must stay Europe/Lisbon (window bounds are local-midnight instants). Deploying in UTC is unsafe.
+5. Today's last-night score may show "partial" until the sleep page is opened (D5). Option: add an explicit night-sample fetch for the recent window only. Want it?
+6. Google 403 stays a generic error, not auth_required. Acceptable?
+7. Lock release is not token-based; matters only if a step outlives the 2-minute TTL (chunks took <=17s).
+8. Light-minutes mapping question (e.g. light=1385 on a full day, moderate/vigorous/peak mostly 0; 10-16 light 0 with steps 9421) is untouched and belongs to the separate AZM investigation.
+9. Reconnect Google and the generic error banner have never been seen live. Please check once by hand if convenient.
+10. July data before 07-19 has no steps (steps backfill is not part of catch-up since synced_through starts at 07-18). Say if you want steps for earlier months.
+11. Pre-existing unrelated uncommitted work (schema.ts edit, sleep page edits, hypnogram, feelings, etc.) is still uncommitted and was kept out of every commit by content-level staging.
+
+### What was verified, and how
+PM-verified (read-only, this environment): tsc --noEmit clean; pure fixtures (`scripts/catch-up-check.ts` under TZ=Europe/Lisbon, `scripts/catch-up-banner-check.ts`) ALL CHECKS PASSED; persist.ts, analytics, scoring untouched in every phase; staged diffs match scope (P3: 12 files, 444 insertions / 66 deletions); staged sleep/page.tsx diff is only the two AutoSync lines (large unrelated edits stay unstaged); `git grep --cached AutoSync -- src` and working tree grep show only the unused `shouldAutoSync` identifier/comments in sync.ts; no ensureNightSamples in the catch-up path.
+Builder-reported (PM has no DB/Google/browser access): drizzle push; init script (derived 2026-07-18); the full live catch-up loop (7 gap chunks + recent, 91/91, idle) and DB counts per month; concurrency (running + busy); AZM for 10-14..10-17 now real values; induced-failure lock release; npm run build and staged-tree tsc in each phase; Phase 3 live Chrome runs via DOM text (60-day setback showed "Syncing..." -> 14 of 56 (25%) -> 28 of 56 (50%) -> banner gone, DB cursor restored to 2026-10-21 by the catch-up itself; busy case made exactly 21 POSTs in ~60s then "Another sync is still running" + Retry, lock cleared; SyncButton "Syncing…" -> "synced just now").
+NOT verified live: the auth_required/Reconnect Google banner and the generic error banner (fixtures only); screenshots (none captured); "No refresh token" auth mapping sites (static inspection only); behavior on client-side navigation (by design, D10).
+
+---
+
 Source of truth: docs/catch-up-sync/SPEC.md. Workflow: PM opens/signs off each phase, code-reviewer reviews each phase diff, max two fix rounds, one commit per phase.
 
 ## Phase 0: read-only investigation
@@ -202,3 +248,16 @@ Spot-checks (record real output):
 6. tsc --noEmit and npm run build pass.
 
 Phase 3 sign-off requires: tsc/build output, spot-check outputs, no unresolved BLOCKING review findings (max two fix rounds), git diff --stat limited to src/app/dashboard/layout.tsx, the new client component, the pure src/lib module (plus fixtures script), format.ts helper if needed, and removal/edits of the five page triggers (excluding pre-existing unrelated files; note several of those pages, e.g. sleep/page.tsx, already carry unrelated unstaged edits, so the builder must stage only its own hunks).
+
+## Phase 3: UI
+
+Status: DONE. Decision: GO (build complete).
+
+### PM-verified (read-only)
+- `git diff --cached --stat`: exactly the 12 expected files (444 insertions, 66 deletions); auto-sync.tsx deleted.
+- Staged sleep/page.tsx diff: only the AutoSync import and element removed.
+- `git grep --cached -n AutoSync -- src` and `grep -rn AutoSync src`: only `shouldAutoSync` in src/app/actions/sync.ts (unused flag/comments). Carry-forward (e) PASS.
+- No persist.ts / analytics / scoring in the diff. tsc clean. Banner fixtures and catch-up fixtures ALL CHECKS PASSED.
+- Carry-forwards (a)-(g): PASS per fixtures and builder-reported live runs (never sends force; previousTotal echoed; loop stops on terminal kinds; refresh on idle only; server-side staleness; Reconnect reuses signIn("google")).
+
+### Decision: GO

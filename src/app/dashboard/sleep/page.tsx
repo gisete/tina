@@ -4,7 +4,6 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import SyncButton from "../components/sync-button";
-import AutoSync from "../components/auto-sync";
 import SleepCharts from "../components/sleep-charts";
 import HypnogramChart from "../components/hypnogram-chart";
 import SleepScoreCard from "../components/sleep-score-card";
@@ -43,7 +42,6 @@ export default async function SleepPage({
           </p>
         </div>
         <div className="flex items-center gap-2.5">
-          <AutoSync shouldSync={data?.shouldAutoSync ?? false} />
           <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
         </div>
       </div>

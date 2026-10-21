@@ -1,6 +1,7 @@
 import { auth, signOut } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import CatchUpSync from "./components/catch-up-sync";
 
 export default async function DashboardLayout({
   children,
@@ -110,6 +111,7 @@ export default async function DashboardLayout({
             </Link>
           ))}
         </nav>
+        <CatchUpSync />
         {children}
       </main>
 

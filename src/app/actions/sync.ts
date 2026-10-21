@@ -318,7 +318,7 @@ async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number }
  *
  * Call ONLY from non-render contexts — the Sync button and the /api/sync route.
  * revalidatePath is unsupported during render, so the auto-sync inside
- * render-time callers must NOT call this directly — use the <AutoSync> client
+ * render-time callers must NOT call this directly — use the layout-level <CatchUpSync> client
  * component instead, which fires post-render where revalidatePath is legal.
  */
 export async function syncFromGoogle(opts: { days?: number } = {}): Promise<void> {
@@ -352,7 +352,7 @@ export async function syncFromGoogle(opts: { days?: number } = {}): Promise<void
  *
  * Returns `shouldAutoSync: true` only when (a) the selected date is today and
  * (b) the sync clock is older than STALE_AFTER_HOURS. The caller renders a
- * client-side <AutoSync> component that fires the actual sync after paint,
+ * client-side trigger (now the layout-level <CatchUpSync>, which ignores this flag) that fires the actual sync after paint,
  * where revalidatePath is legal.
  *
  * Historical dates (any targetDate ≠ today) always return shouldAutoSync=false

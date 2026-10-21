@@ -8,7 +8,6 @@ import NightHeartChart from "../../components/night-heart-chart";
 import DateNavigator from "../../components/date-navigator";
 import HrTrendChart from "./hr-trend-chart";
 import RecoveryBalanceChart from "./recovery-balance-chart";
-import AutoSync from "../../components/auto-sync";
 import { localToday, addDays } from "@/lib/dates";
 import { formatClockTime } from "@/lib/format";
 import { WINDOW_DAYS } from "@/lib/analytics/hr-trends";
@@ -68,7 +67,6 @@ export default async function HeartRateDetailPage({
               </p>
             </div>
             <div className="flex items-center gap-2.5">
-              <AutoSync shouldSync={data?.shouldAutoSync ?? false} />
               <DateNavigator />
             </div>
           </div>
@@ -98,7 +96,6 @@ export default async function HeartRateDetailPage({
               </p>
             </div>
             <div className="flex items-center gap-2.5">
-              <AutoSync shouldSync={data?.shouldAutoSync ?? false} />
               <DateNavigator />
             </div>
           </div>
