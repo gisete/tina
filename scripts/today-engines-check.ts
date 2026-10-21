@@ -3,6 +3,8 @@
 import assert from "node:assert/strict";
 import {
   isoWeekdayOf, resolveDay, pickMotivationLine, conditionsToHighlight,
+  validateLogDate, loggableDates, isSyncStale, plannedItemsFor, toggleExerciseItem, buildBackupLog, skippedExerciseLog,
+  type ConditionOption,
   type ExercisePlanItem, type MealPlanItem, type MotivationLine, type ExerciseDayLog, type MealLog,
 } from "@/lib/today";
 
@@ -58,8 +60,8 @@ console.log("backup round-trip:", JSON.stringify(backup.exercise.log));
 
 // 4. Meals: logged snapshot survives template edit/delete; orphan still shown.
 const mealLogs: MealLog[] = [
-  { mealPlanItemId: 10, slot: "breakfast", descriptionSnapshot: "Oats", followed: true },
-  { mealPlanItemId: null, slot: "lunch", descriptionSnapshot: "Old salad (deleted item)", followed: true },
+  { id: 1, mealPlanItemId: 10, slot: "breakfast", descriptionSnapshot: "Oats", followed: true },
+  { id: 2, mealPlanItemId: null, slot: "lunch", descriptionSnapshot: "Old salad (deleted item)", followed: true },
 ];
 const meals = resolveDay("2026-10-21", { exercise: [], meals: [{ ...mealTpl[0], description: "Eggs" }] }, { exercise: null, meals: mealLogs });
 assert.deepEqual(meals.meals.breakfast.map((m) => [m.description, m.followed]), [["Oats", true]]);
@@ -77,4 +79,49 @@ assert.deepEqual(conditionsToHighlight(null, conds), []);
 assert.deepEqual(conditionsToHighlight(64, conds), [1]);
 assert.deepEqual(conditionsToHighlight(70, conds), []); // strictly below
 console.log("nudge: null →", conditionsToHighlight(null, conds), "| 64 →", conditionsToHighlight(64, conds), "| 70 →", conditionsToHighlight(70, conds));
+
+// 6. Phase 4: orphaned meal log (FK nulled by copy-day) is matched back to its recreated template item.
+const recreated: MealPlanItem[] = [{ id: 99, weekday: 3, slot: "breakfast", position: 0, description: "Oats" }];
+const orphan: MealLog[] = [{ id: 5, mealPlanItemId: null, slot: "breakfast", descriptionSnapshot: "Oats", followed: true }];
+const adopted = resolveDay("2026-10-21", { exercise: [], meals: recreated }, { exercise: null, meals: orphan });
+assert.deepEqual(adopted.meals.breakfast.map((m) => [m.mealPlanItemId, m.logId, m.followed]), [[99, 5, true]]); // one row, not two
+const twoSame: MealLog[] = [...orphan, { id: 6, mealPlanItemId: null, slot: "breakfast", descriptionSnapshot: "Oats", followed: false }];
+const dup = resolveDay("2026-10-21", { exercise: [], meals: recreated }, { exercise: null, meals: twoSame });
+assert.equal(dup.meals.breakfast.length, 2); // second identical orphan stays visible, never silently dropped
+console.log("orphan adoption:", JSON.stringify(adopted.meals.breakfast));
+
+// 7. Exercise log builders.
+const tplItems = plannedItemsFor("2026-10-21", exTpl);
+assert.deepEqual(tplItems.map((i) => i.name), ["Run", "Squats"]);
+const t1 = toggleExerciseItem(null, tplItems, 0)!;
+assert.equal(t1.status, "planned"); assert.equal(t1.items[0].done, true); assert.equal(t1.items[1].done, false);
+const t2 = toggleExerciseItem(t1, plannedItemsFor("2026-10-21", editedTpl), 0)!; // template edited since: snapshot wins
+assert.equal(t2.items[0].name, "Run"); assert.equal(t2.items[0].done, false);
+assert.equal(toggleExerciseItem(t1, tplItems, 5), null);
+assert.equal(toggleExerciseItem(skippedExerciseLog(), tplItems, 1)!.status, "planned"); // toggling after skip starts a planned log
+const opts: ConditionOption[] = [
+  { id: 1, conditionId: 7, name: "Walk", details: "15 min", position: 1, archived: false },
+  { id: 2, conditionId: 7, name: "Stretch", details: null, position: 0, archived: false },
+  { id: 3, conditionId: 7, name: "Old", details: null, position: 2, archived: true },
+  { id: 4, conditionId: 8, name: "Other cond", details: null, position: 0, archived: false },
+];
+const bk = buildBackupLog({ id: 7, name: "Low energy", archived: false }, opts, [1, 2]);
+assert.ok(bk.ok && bk.value.status === "backup" && bk.value.conditionNameSnapshot === "Low energy");
+assert.deepEqual(bk.ok && bk.value.items.map((i) => i.name), ["Stretch", "Walk"]); // plan order
+assert.ok(!buildBackupLog({ id: 7, name: "Low energy", archived: false }, opts, [3]).ok); // archived option
+assert.ok(!buildBackupLog({ id: 7, name: "Low energy", archived: false }, opts, [4]).ok); // other condition's option
+assert.ok(!buildBackupLog({ id: 7, name: "Low energy", archived: false }, opts, [1, 4]).ok); // mixed
+assert.ok(!buildBackupLog({ id: 7, name: "Low energy", archived: true }, opts, [1]).ok); // archived condition
+assert.ok(!buildBackupLog({ id: 7, name: "Low energy", archived: false }, opts, []).ok);
+console.log("backup log:", JSON.stringify(bk.ok && bk.value));
+
+// 8. Log-date window + staleness.
+assert.deepEqual(loggableDates("2026-03-01"), ["2026-03-01", "2026-02-28"]);
+assert.ok(validateLogDate("2026-10-21", "2026-10-21").ok);
+assert.ok(validateLogDate("2026-10-20", "2026-10-21").ok);
+for (const bad of ["2026-10-19", "2026-10-22", "2026-10-2", "not-a-date", "", null, 20261021, "2026-10-21T00:00:00Z"]) assert.ok(!validateLogDate(bad, "2026-10-21").ok, String(bad));
+assert.equal(isSyncStale(null, 1e12, 6), true);
+assert.equal(isSyncStale(1e12 - 5 * 3_600_000, 1e12, 6), false);
+assert.equal(isSyncStale(1e12 - 7 * 3_600_000, 1e12, 6), true);
+console.log("log window ok; rejected: 2026-10-19, 2026-10-22, malformed, non-string");
 console.log("ALL CHECKS PASSED");

@@ -25,6 +25,14 @@ export default async function DashboardLayout({
         {/* Navigation */}
         <nav className="flex-1 px-3 space-y-1">
           <Link
+            href="/dashboard/today"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
+          >
+            <span>☀️</span>
+            <span>Today</span>
+          </Link>
+
+          <Link
             href="/dashboard"
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
           >
@@ -84,6 +92,24 @@ export default async function DashboardLayout({
 
       {/* Main content */}
       <main className="flex-1 h-screen overflow-y-auto bg-background">
+        {/* Mobile nav — the sidebar is hidden below md */}
+        <nav className="md:hidden sticky top-0 z-30 flex gap-1 overflow-x-auto border-b border-outline-variant bg-surface px-3 py-2">
+          {[
+            { href: "/dashboard/today", label: "Today" },
+            { href: "/dashboard/plan", label: "Plan" },
+            { href: "/dashboard/sleep", label: "Sleep" },
+            { href: "/dashboard/heart", label: "Heart" },
+            { href: "/dashboard", label: "Overview" },
+          ].map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="shrink-0 rounded-xl px-3 py-1.5 text-sm font-medium text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
+            >
+              {l.label}
+            </Link>
+          ))}
+        </nav>
         {children}
       </main>
 

@@ -14,10 +14,12 @@ import {
   conditionOptions,
   mindsetItems,
   motivationLines,
+  exerciseDayLogs,
+  mealLogs,
 } from "@/db/schema";
 import { and, asc, eq, ne, sql, type SQL } from "drizzle-orm";
 import { moveId, type MoveDirection } from "./validate";
-import type { IsoWeekday, MealSlot, MindsetKind } from "./types";
+import type { ExerciseDayLog, IsoWeekday, MealSlot, MindsetKind } from "./types";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -292,4 +294,113 @@ export async function setMotivationLineActive(userId: string, id: number, active
 
 export async function deleteMotivationLine(userId: string, id: number): Promise<void> {
   await db.delete(motivationLines).where(and(eq(motivationLines.id, id), eq(motivationLines.userId, userId)));
+}
+
+// ── Daily logs (snapshots) ───────────────────────────────────────────────────
+
+/** Creates or replaces the single exercise log for (user, date). */
+export async function upsertExerciseLog(userId: string, date: string, log: ExerciseDayLog): Promise<void> {
+  const values = {
+    status: log.status,
+    conditionId: log.conditionId,
+    conditionNameSnapshot: log.conditionNameSnapshot,
+    items: log.items,
+    note: log.note,
+  };
+  await db
+    .insert(exerciseDayLogs)
+    .values({ userId, date, ...values })
+    .onConflictDoUpdate({
+      target: [exerciseDayLogs.userId, exerciseDayLogs.date],
+      set: { ...values, updatedAt: sql`NOW()` },
+    });
+}
+
+export async function deleteExerciseLog(userId: string, date: string): Promise<void> {
+  await db.delete(exerciseDayLogs).where(and(eq(exerciseDayLogs.userId, userId), eq(exerciseDayLogs.date, date)));
+}
+
+/**
+ * Checks a template meal off (or on) for a date. The description is
+ * snapshotted when the log row is first created and never rewritten, so later
+ * template edits can't change what was logged. `weekday` must be the weekday
+ * of `date`; a template item from another day resolves false.
+ *
+ * meal_logs' unique index treats NULL item ids as distinct, so an orphaned
+ * log (FK nulled when the template item was recreated) with the same slot and
+ * text is re-attached instead of inserting a duplicate row.
+ */
+export async function setMealFollowed(
+  userId: string,
+  date: string,
+  weekday: IsoWeekday,
+  mealPlanItemId: number,
+  followed: boolean,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [item] = await tx
+      .select()
+      .from(mealPlanItems)
+      .where(and(
+        eq(mealPlanItems.id, mealPlanItemId),
+        eq(mealPlanItems.userId, userId),
+        eq(mealPlanItems.weekday, weekday),
+      ));
+    if (!item) return false;
+
+    // Already logged against this item: just flip it. (Adopting an orphan here
+    // would collide with the (user, date, item) unique index.)
+    const [linked] = await tx
+      .select({ id: mealLogs.id })
+      .from(mealLogs)
+      .where(and(eq(mealLogs.userId, userId), eq(mealLogs.date, date), eq(mealLogs.mealPlanItemId, item.id)));
+    if (linked) {
+      await tx.update(mealLogs).set({ followed, updatedAt: sql`NOW()` }).where(eq(mealLogs.id, linked.id));
+      return true;
+    }
+
+    const [orphan] = await tx
+      .select({ id: mealLogs.id })
+      .from(mealLogs)
+      .where(and(
+        eq(mealLogs.userId, userId),
+        eq(mealLogs.date, date),
+        sql`${mealLogs.mealPlanItemId} IS NULL`,
+        eq(mealLogs.slot, item.slot),
+        eq(mealLogs.descriptionSnapshot, item.description),
+      ))
+      .limit(1);
+
+    if (orphan) {
+      await tx
+        .update(mealLogs)
+        .set({ mealPlanItemId: item.id, followed, updatedAt: sql`NOW()` })
+        .where(eq(mealLogs.id, orphan.id));
+      return true;
+    }
+
+    await tx
+      .insert(mealLogs)
+      .values({ userId, date, mealPlanItemId: item.id, slot: item.slot, descriptionSnapshot: item.description, followed })
+      .onConflictDoUpdate({
+        target: [mealLogs.userId, mealLogs.date, mealLogs.mealPlanItemId],
+        set: { followed, updatedAt: sql`NOW()` },
+      });
+    return true;
+  });
+}
+
+/** Toggles an existing meal log row directly (detached logs have no template item). */
+export async function setMealLogFollowed(
+  userId: string,
+  date: string,
+  logId: number,
+  followed: boolean,
+): Promise<boolean> {
+  const updated = await db
+    .update(mealLogs)
+    .set({ followed, updatedAt: sql`NOW()` })
+    .where(and(eq(mealLogs.id, logId), eq(mealLogs.userId, userId), eq(mealLogs.date, date)))
+    .returning({ id: mealLogs.id });
+  return updated.length > 0;
 }

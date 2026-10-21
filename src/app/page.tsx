@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 export default async function LandingPage() {
   // If the user already has a valid session, skip the landing page entirely
   const session = await auth();
-  if (session?.user) redirect("/dashboard");
+  if (session?.user) redirect("/dashboard/today");
 
   return (
     <div className="font-sans min-h-screen bg-surface flex items-center justify-center p-6">
@@ -30,7 +30,7 @@ export default async function LandingPage() {
           <form
             action={async () => {
               "use server";
-              await signIn("google", { redirectTo: "/dashboard" });
+              await signIn("google", { redirectTo: "/dashboard/today" });
             }}
           >
             <button

@@ -71,6 +71,7 @@ export interface ExerciseDayLog {
 }
 
 export interface MealLog {
+  id: number;
   /** Null once the template item has been deleted (FK set null). */
   mealPlanItemId: number | null;
   slot: MealSlot;
@@ -89,6 +90,8 @@ export type ExerciseLogState =
 export interface TodayMealItem {
   /** Null for an orphaned log whose template item was deleted. */
   mealPlanItemId: number | null;
+  /** meal_logs row id when logged, else null. */
+  logId: number | null;
   slot: MealSlot;
   description: string;
   followed: boolean;

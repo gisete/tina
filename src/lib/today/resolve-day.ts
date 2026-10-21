@@ -71,21 +71,29 @@ export function resolveDay(date: string, templates: DayTemplates, logs: DayLogs)
     TodayMealItem[]
   >;
 
+  const shown = new Set<MealLog>();
   for (const item of templates.meals.filter((m) => m.weekday === weekday).sort(byPosition)) {
-    const log = logByItemId.get(item.id);
+    // A log whose template item was recreated (e.g. "copy day to all days"
+    // deletes and re-inserts items, nulling the FK) is matched back by slot +
+    // the text it was logged with, so the meal doesn't appear twice.
+    const log =
+      logByItemId.get(item.id) ??
+      orphanLogs.find((o) => !shown.has(o) && o.slot === item.slot && o.descriptionSnapshot === item.description);
+    if (log) shown.add(log);
     meals[item.slot].push(
       log
-        ? { mealPlanItemId: item.id, slot: log.slot, description: log.descriptionSnapshot, followed: log.followed, logged: true }
-        : { mealPlanItemId: item.id, slot: item.slot, description: item.description, followed: false, logged: false },
+        ? { mealPlanItemId: item.id, logId: log.id, slot: log.slot, description: log.descriptionSnapshot, followed: log.followed, logged: true }
+        : { mealPlanItemId: item.id, logId: null, slot: item.slot, description: item.description, followed: false, logged: false },
     );
   }
-  // Logs whose template item was since deleted (or removed from this weekday)
-  // still show their snapshot.
-  const listedIds = new Set(meals.breakfast.concat(meals.lunch, meals.dinner, meals.snack).map((m) => m.mealPlanItemId));
-  const detached = [...orphanLogs, ...[...logByItemId.entries()].filter(([id]) => !listedIds.has(id)).map(([, l]) => l)];
-  for (const l of detached) {
+
+  // Remaining logs (template item deleted, or moved off this weekday) still
+  // show their snapshot.
+  for (const l of logs.meals) {
+    if (shown.has(l)) continue;
     meals[l.slot].push({
       mealPlanItemId: l.mealPlanItemId,
+      logId: l.id,
       slot: l.slot,
       description: l.descriptionSnapshot,
       followed: l.followed,

@@ -89,3 +89,19 @@ export function parseOptionalNumber(raw: string): number | null {
   const trimmed = raw.trim();
   return trimmed === "" ? null : Number(trimmed);
 }
+
+/** A non-empty, de-duplicated list of positive integer ids (max 50). */
+export function validateIdList(raw: unknown): Validated<number[]> {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 50) return fail("Pick at least one option");
+  const ids: number[] = [];
+  for (const entry of raw) {
+    const id = validateId(entry);
+    if (!id.ok) return id;
+    ids.push(id.value);
+  }
+  return { ok: true, value: [...new Set(ids)] };
+}
+
+export function validateBoolean(raw: unknown): Validated<boolean> {
+  return typeof raw === "boolean" ? { ok: true, value: raw } : fail("Invalid value");
+}

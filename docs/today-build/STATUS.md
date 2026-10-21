@@ -96,12 +96,39 @@ Carry-forward to Phase 4:
 ### Phase 3 -> Phase 4 decision: GO
 Gate green, scope clean, blocking finding fixed and re-reviewed, DB-level checks pass. UI click-through is an accepted, recorded gap (Q5), not blocking since logic is live-verified and UI is thin.
 
-## Phase 4 — Today screen + logging: OPEN
+## Phase 4 — Today screen + logging: DONE (UI/auth path not exercised live, see Q6)
+
+Gate (builder, re-run after fix round 1): tsc clean; build "Compiled successfully" with /dashboard/today and /dashboard/plan in route list; staged-snapshot tsc "STAGED TREE TSC OK". No schema change, no push. scripts/today-engines-check.ts ALL CHECKS PASSED under Europe/Lisbon, America/Los_Angeles, Pacific/Auckland. Process incident: `git add src/app/actions` accidentally staged feelings.ts; caught by snapshot check, unstaged, verified untracked.
+Verified by PM: `git diff --cached --stat` = 21 files, +1052/-17: scripts/today-engines-check.ts, src/app/actions/{plan,today}.ts, dashboard/layout.tsx, dashboard/today/** (page + 6 components), src/app/page.tsx, src/lib/today/{exercise-log,index,last-night-score,log-date,persist,read,resolve-day,types,validate}.ts. feelings.ts, night-*.tsx, feeling-tags.ts remain untracked/unstaged; sleep page, schema.ts, sync.ts, scoring not staged.
+Spot-checks (builder output, live DB, throwaway user, cleaned up; run the same pure builders + persist functions the actions call):
+1. Planned log keeps OLD text ("Squats" 3×12) after template edit to "Squats (EDITED)".
+2. Backup row printed with condition_id 2, snapshot "Low energy", 2 items; snapshot survives archiving; planned->backup leaves 1 row per (user,date).
+3. Meal check-off; template edit+delete: log keeps description_snapshot "Salad", FK null, followed true; resolveDay still shows it; wrong weekday -> false.
+4. Re-adding identical meal + toggle re-attaches orphan: rows=1, followed=false (carry-forwards a/b RESOLVED).
+5. Real account, stored data only, 0 outbound fetches: steps {yesterday 6920, today 1615}; last night "not-synced" (DB last sync 2026-07-18, genuine); sync stale true. Scored path proven via as-if dates: 07-17 -> 81 partial:false (11324 samples); 07-16 -> 75 partial:true (0 samples, cardiac null); 07-16 as-if -> 82.
+Date window: validateLogDate accepts today/yesterday, rejects 2 days ago, tomorrow, malformed/null/number/ISO-with-time (fixtures). Carry-forward (c) archived filtering and (d) date validation handled per builder/reviewer.
+Review: Round 1 all 7 invariants hold; 2 BLOCKING FIXED (meal-block moved-weekday toggle sent wrong id -> "not found"; orphan adoption could violate unique index, verified live). Round 2: BLOCKING none, nothing new. Also fixed: "Skip today" -> "Skip"; plan.ts mutate() revalidates /dashboard/today. Today page does not import readDashboardData/loadPageData/ensureNightSamples/google (import graph traced); sync.ts, scoring, heart, sleep/heart pages untouched.
+Not changed, justified: index-based exercise toggle may hit wrong item if template edited between render and click on an unlogged day (single user, low risk); cross-tab last-write-wins; TODAY_STALE_AFTER_HOURS=6 duplicated from sync.ts (documented); steps-card own number format.
+
+DEVIATION D4: UI never clicked (Chrome extension not connected); Server Actions' auth/revalidate path and the Today page's real render were only compiled/typechecked, not run. Sign-in redirectTo change untested live.
+
+Open question:
+- Q6. Gisete: sign in and open /dashboard/today, then click through (check items, backup flow, meal check-off, Yesterday tab). This also triggers the first auto-sync (DB last synced 2026-07-18). That sync fetches only a 3-day window, so nights between 07-18 and ~3 days ago stay missing unless /api/sync?days=N is run (existing path, unchanged). Last-night card will show "Not synced yet" until then.
+
+### Phase 4 -> Phase 5 decision: GO
+Gate green, scope clean (unrelated work not staged), 2 blocking findings fixed and re-reviewed, DB-level checks pass, server-tz STOP did not trigger. UI/auth gap recorded (D4/Q6), not blocking.
+
+## Phase 5 — Sleep nudge: OPEN
+
+Criteria (SPEC): on Today, when last night's score is below a condition's threshold, visually highlight that condition with a line like "Last night scored 64, consider this." Suggestion only, never auto-swap (no automatic status change/backup log). Use pure sleep-nudge.ts with the Phase 4 last-night score (stored data only, no Google call); null/not-synced score -> no highlight; archived conditions excluded; strictly-below threshold.
+Spot-checks: (1) fixture-check via sleep-nudge.ts (null -> none; 64 vs 70 -> highlighted; 70 -> none; archived excluded); (2) on the real DB report last night's score and which conditions (if any) would be highlighted; note that the live last night is currently "not-synced", so also report the as-if scored case and state which it is. Gate: tsc, build, staged-snapshot tsc; diff limited to Today UI/lib, nothing unrelated staged.
+
+Status: open, awaiting implementation.
+
+## Phase 4 criteria (archived)
 
 Criteria (SPEC Phase 4): new Today route as landing (update sign-in redirectTo; sleep/heart stay in nav; consider mobile nav). Blocks: motivation line; today's workout (checkable items) with "Not feeling great?" listing active (non-archived) conditions, tap shows options (multi-select), logs status 'backup' with options snapshotted; Skip; meal plan by slot with check-off; mantras; collapsible strategies via shared expandable-card; steps (yesterday primary, today "so far", NULL = no data); compact last-night Sleep Score card linking to sleep page. Logging limited to today/yesterday with toggle; server action validates date format first, then that it is one of the two (local date helpers). Last-night score from stored data only: no lazy HR fetch, no Google call; cardiac=null with "partial" indicator when samples uncached; "Not synced yet" when no session. Same stale-view auto-sync trigger as sleep page.
 Spot-checks: log planned workout, edit weekday template, confirm log row keeps old text (SQL); log a backup and print row; check off a meal, delete the template item, confirm log row keeps description_snapshot. Add: copy-to-all-days then confirm no duplicate of a logged meal (carry-forward a/b); archived conditions/options not shown. Gate: tsc, build, staged-snapshot tsc.
-
-Status: open, awaiting implementation.
 
 ## Phase 3 criteria (archived)
 

@@ -24,6 +24,8 @@ import * as plan from "@/lib/today/persist";
 export type PlanResult = { ok: true } | { ok: false; error: string };
 
 const PLAN_PATH = "/dashboard/plan";
+/** The Today screen renders the plan, so plan edits must refresh it too. */
+const TODAY_PATH = "/dashboard/today";
 
 /** Auth gate + revalidation shared by every action. */
 async function mutate(run: (userId: string) => Promise<PlanResult>): Promise<PlanResult> {
@@ -32,7 +34,10 @@ async function mutate(run: (userId: string) => Promise<PlanResult>): Promise<Pla
 
   try {
     const result = await run(session.user.id);
-    if (result.ok) revalidatePath(PLAN_PATH);
+    if (result.ok) {
+      revalidatePath(PLAN_PATH);
+      revalidatePath(TODAY_PATH);
+    }
     return result;
   } catch (err) {
     console.error("[plan]", err instanceof Error ? err.message : err);
