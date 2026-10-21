@@ -8,14 +8,16 @@ import {
   fetchGoogleHeartData,
   fetchGoogleHeartRateSamples,
   fetchGoogleZoneRecords,
+  fetchGoogleDailySteps,
 } from "@/lib/google/client";
 import {
   normalizeGoogleSleepSessions,
   normalizeHeartData,
   normalizeHeartRateSamples,
   normalizeZoneRecords,
+  normalizeDailySteps,
 } from "@/lib/google/normalizers";
-import { persistHealthRecords, persistHeartRateSamples, persistActivitySummaries } from "@/lib/sync/persist";
+import { persistHealthRecords, persistHeartRateSamples, persistActivitySummaries, persistDailySteps } from "@/lib/sync/persist";
 import { aggregateZoneMinutes } from "@/lib/analytics/activity";
 import { assembleDashboardData } from "@/lib/sync/assemble";
 import { selectMainSessions, buildDebtHistory, calculateSleepDebt } from "@/lib/analytics/sleep";
@@ -205,10 +207,15 @@ async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number }
   const startISO = startDate.toISOString();
   const endISO = endDate.toISOString();
 
-  const [sleepResult, heartResult, zoneResult] = await Promise.allSettled([
+  // Steps are keyed by civil date; end is exclusive so tomorrow includes today.
+  const stepsStartDate = addDays(localToday(), -days);
+  const stepsEndExclusive = addDays(localToday(), 1);
+
+  const [sleepResult, heartResult, zoneResult, stepsResult] = await Promise.allSettled([
     fetchGoogleSleepData(userId, startISO, endISO),
     fetchGoogleHeartData(userId, startISO, endISO),
     fetchGoogleZoneRecords(userId, startISO, endISO),
+    fetchGoogleDailySteps(userId, stepsStartDate, stepsEndExclusive),
   ]);
 
   if (sleepResult.status === "rejected") throw sleepResult.reason;
@@ -222,6 +229,12 @@ async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number }
     console.warn(
       "[sync] Zone minutes fetch failed (continuing):",
       zoneResult.reason?.message ?? zoneResult.reason
+    );
+  }
+  if (stepsResult.status === "rejected") {
+    console.warn(
+      "[sync] Steps fetch failed (continuing):",
+      stepsResult.reason?.message ?? stepsResult.reason
     );
   }
   const rawHeartData = heartResult.status === "fulfilled" ? heartResult.value : null;
@@ -267,6 +280,14 @@ async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number }
       };
     });
     await persistActivitySummaries(userId, activitySummaries);
+  }
+
+  if (stepsResult.status === "fulfilled") {
+    try {
+      await persistDailySteps(userId, normalizeDailySteps(stepsResult.value));
+    } catch (err) {
+      console.warn("[sync] Steps persist failed (continuing):", err instanceof Error ? err.message : err);
+    }
   }
 
   // Populate the HR sample cache for the most-recent main session if sparse.

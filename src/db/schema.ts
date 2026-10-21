@@ -93,6 +93,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   heartRateSamples: many(heartRateSamples),
   dailyActivitySummaries: many(dailyActivitySummaries),
 }));
+    /** Daily step total; nullable until a steps sync has run for the day. */
+    steps: integer("steps"),
 
 export const heartRateSamplesRelations = relations(heartRateSamples, ({ one }) => ({
   user: one(users, { fields: [heartRateSamples.userId], references: [users.id] }),

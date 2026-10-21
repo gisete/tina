@@ -8,6 +8,7 @@ import type {
   GoogleHealthHrvDataPoint,
   GoogleHealthHeartRateSamplePoint,
   GoogleZoneMinutePoint,
+  GoogleDailyStepsPoint,
 } from "./normalizers";
 
 async function refreshGoogleAccessToken(userId: string, refreshToken: string) {
@@ -231,4 +232,60 @@ export async function fetchGoogleHeartRateSamples(
   });
 
   return dataPoints as GoogleHealthHeartRateSamplePoint[];
+}
+
+/** Days per dailyRollUp request — keeps each response well inside one page. */
+const STEPS_ROLLUP_CHUNK_DAYS = 30;
+
+const toCivilDate = (s: string) => {
+  const [year, month, day] = s.split("-").map(Number);
+  return { date: { year, month, day } };
+};
+
+/**
+ * Fetches server-side daily step totals via the `steps` data type's
+ * `dailyRollUp`, keyed by the user's civil date. `startDate` is inclusive and
+ * `endDateExclusive` exclusive ("YYYY-MM-DD", local-tz helpers only), so
+ * passing tomorrow includes today's partial total.
+ */
+export async function fetchGoogleDailySteps(
+  userId: string,
+  startDate: string,
+  endDateExclusive: string,
+): Promise<GoogleDailyStepsPoint[]> {
+  const url = "https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp";
+  let accessToken = await getGoogleValidClientToken(userId);
+  const points: GoogleDailyStepsPoint[] = [];
+
+  for (let from = startDate; from < endDateExclusive; from = addDays(from, STEPS_ROLLUP_CHUNK_DAYS)) {
+    const chunkEnd = addDays(from, STEPS_ROLLUP_CHUNK_DAYS);
+    const to = chunkEnd < endDateExclusive ? chunkEnd : endDateExclusive;
+    const body = JSON.stringify({ range: { start: toCivilDate(from), end: toCivilDate(to) } });
+
+    const doFetch = (token: string) =>
+      fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+        body,
+      });
+
+    let response = await doFetch(accessToken);
+    if (response.status === 401) {
+      const account = await db.query.accounts.findFirst({
+        where: and(eq(accounts.userId, userId), eq(accounts.provider, "google")),
+      });
+      if (!account?.refresh_token) throw new Error("No refresh token available.");
+      accessToken = await refreshGoogleAccessToken(userId, account.refresh_token);
+      response = await doFetch(accessToken);
+    }
+    if (!response.ok) {
+      throw new Error(`Google Health API error [steps dailyRollUp]: ${response.status} - ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    points.push(...((data.rollupDataPoints ?? []) as GoogleDailyStepsPoint[]));
+  }
+
+  console.log(`[google] Fetched ${points.length} daily steps rollup points`);
+  return points;
 }

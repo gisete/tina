@@ -133,6 +133,36 @@ export async function persistActivitySummaries(
   console.log(`[sync] Upserted ${summaries.length} activity summaries`);
 }
 
+export interface DailyStepsRow {
+  activityDate: string; // "YYYY-MM-DD"
+  steps: number;
+}
+
+/**
+ * Upserts daily step totals into daily_activity_summaries. Today's total is
+ * partial and grows through the day, so the incoming value always overwrites
+ * (deliberately NOT COALESCE-preserving). Only the steps column is touched on
+ * conflict, so zone minutes written by persistActivitySummaries survive;
+ * rows created here start with the zone-minute column defaults (0).
+ */
+export async function persistDailySteps(
+  userId: string,
+  rows: DailyStepsRow[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  await db
+    .insert(dailyActivitySummaries)
+    .values(rows.map((r) => ({ userId, activityDate: r.activityDate, steps: r.steps })))
+    .onConflictDoUpdate({
+      target: [dailyActivitySummaries.userId, dailyActivitySummaries.activityDate],
+      set: {
+        steps:     sql`EXCLUDED.steps`,
+        updatedAt: sql`NOW()`,
+      },
+    });
+  console.log(`[sync] Upserted ${rows.length} daily step totals`);
+}
+
 /**
  * Bulk-upserts intra-day heart rate samples on the (userId, timestamp) unique
  * index. Re-synced windows overwrite bpm in place, so corrected readings from

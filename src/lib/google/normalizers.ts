@@ -392,3 +392,44 @@ export function normalizeHeartRateSamples(
 
   return samples.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 }
+
+// ---------------------------------------------------------------------------
+// Daily steps normalizer
+// ---------------------------------------------------------------------------
+
+/** One raw point from the `steps` data type's `dailyRollUp` response. */
+export interface GoogleDailyStepsPoint {
+  civilStartTime?: {
+    date?: { year?: number; month?: number; day?: number };
+  };
+  steps?: {
+    /** int64 serialized as a string by the API. */
+    countSum?: string;
+  };
+}
+
+export interface NormalizedDailySteps {
+  /** "YYYY-MM-DD" from the API's civilStartTime.date — never toISOString. */
+  activityDate: string;
+  steps: number;
+}
+
+/** Maps rollup points to per-civil-day totals, skipping malformed points. */
+export function normalizeDailySteps(points: GoogleDailyStepsPoint[]): NormalizedDailySteps[] {
+  const rows: NormalizedDailySteps[] = [];
+
+  for (const pt of points) {
+    const d = pt.civilStartTime?.date;
+    if (!d?.year || !d.month || !d.day) continue;
+
+    const raw = pt.steps?.countSum;
+    if (raw === undefined) continue;
+    const steps = Number(raw);
+    if (!Number.isFinite(steps) || steps < 0) continue;
+
+    const activityDate = `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+    rows.push({ activityDate, steps: Math.round(steps) });
+  }
+
+  return rows;
+}
