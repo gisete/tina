@@ -22,7 +22,11 @@ export default function SyncButton({ lastSyncedAt }: Props) {
 
   const handleSync = () => {
     startTransition(async () => {
-      await syncFromGoogle();
+      try {
+        await syncFromGoogle();
+      } catch {
+        // Non-fatal (auth expired, partial failure): keep the cached view.
+      }
       router.refresh();
     });
   };

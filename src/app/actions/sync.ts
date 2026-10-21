@@ -17,6 +17,7 @@ import {
   normalizeZoneRecords,
   normalizeDailySteps,
 } from "@/lib/google/normalizers";
+import { runSyncStep } from "@/lib/sync/step";
 import { persistHealthRecords, persistHeartRateSamples, persistActivitySummaries, persistDailySteps } from "@/lib/sync/persist";
 import { aggregateZoneMinutes } from "@/lib/analytics/activity";
 import { assembleDashboardData } from "@/lib/sync/assemble";
@@ -321,7 +322,19 @@ async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number }
  * component instead, which fires post-render where revalidatePath is legal.
  */
 export async function syncFromGoogle(opts: { days?: number } = {}): Promise<void> {
-  await runGoogleSync(opts);
+  if (opts.days === undefined) {
+    // Sync button / auto-sync: one forced recent-window step, the same logic
+    // the catch-up endpoint uses (lock, cursor rule, all-or-nothing).
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const result = await runSyncStep(session.user.id, { force: true });
+    if (result.kind === "auth_required") throw new Error("Google sign-in expired. Please reconnect.");
+    if (result.kind === "error") throw new Error(result.message);
+    // busy: another step is already syncing; nothing to do.
+  } else {
+    // /api/sync?days=N recovery path, unchanged.
+    await runGoogleSync(opts);
+  }
 
   // Invalidate server-side page caches so the next navigation gets fresh data.
   revalidatePath("/dashboard");

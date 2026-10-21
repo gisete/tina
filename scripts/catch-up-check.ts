@@ -7,6 +7,8 @@ import {
   RECENT_WINDOW_DAYS,
   advanceCursor,
   deriveSyncedThrough,
+  gapProgress,
+  pickNextUnit,
   planCatchUp,
 } from "@/lib/sync/catch-up";
 
@@ -137,6 +139,41 @@ function assertTiles(syncedThrough: string, today: string): void {
   assert.equal(deriveSyncedThrough(["2026-10-21", "2026-10-19"], TODAY), "2026-10-19");
   assert.equal(deriveSyncedThrough(["2026-10-19", "2026-10-20"], TODAY), "2026-10-20");
   console.log("7 deriveSyncedThrough (live-shaped):", deriveSyncedThrough(covered, TODAY));
+}
+
+// 8. pickNextUnit + a full simulated catch-up loop (the endpoint's decision logic).
+{
+  const plan = planCatchUp("2026-07-18", TODAY);
+  const base = { syncedThrough: "2026-07-18", today: TODAY, stale: false, force: false };
+  assert.equal(pickNextUnit(plan, { ...base, stale: true })?.kind, "recent");
+  assert.equal(pickNextUnit(plan, { ...base, force: true })?.kind, "recent");
+  assert.equal(pickNextUnit(plan, base)?.range.from, "2026-07-19");
+  const done = planCatchUp(TODAY, TODAY);
+  assert.equal(pickNextUnit(done, { ...base, syncedThrough: TODAY }), null);
+  assert.equal(pickNextUnit(planCatchUp(null, TODAY), { ...base, syncedThrough: null }), null);
+  assert.equal(pickNextUnit(planCatchUp("2026-10-20", TODAY), { ...base, syncedThrough: "2026-10-20" })?.kind, "recent");
+
+  // Simulate: stale at start, recent sync stamps the clock, chunks follow, then the closing recent.
+  let cursor: string | null = "2026-07-18";
+  let stale = true;
+  const seq: string[] = [];
+  let total = 0;
+  for (let i = 0; i < 30; i++) {
+    const pl = planCatchUp(cursor, TODAY);
+    const u = pickNextUnit(pl, { syncedThrough: cursor, today: TODAY, stale, force: false });
+    if (!u) break;
+    if (u.kind === "recent") stale = false;
+    cursor = advanceCursor(cursor, u.range.from, u.range.to);
+    const prog = gapProgress(total, pl.gapDays, planCatchUp(cursor, TODAY).gapDays);
+    total = prog.daysTotal;
+    seq.push(`${u.kind}:${u.range.from}..${u.range.to} ${prog.daysDone}/${prog.daysTotal} cursor=${cursor}`);
+  }
+  assert.equal(seq.length, 9, "recent + 7 gap chunks + closing recent");
+  assert.ok(seq[0].startsWith("recent:2026-10-18..2026-10-21 0/91 cursor=2026-07-18"), seq[0]);
+  assert.ok(seq[7].startsWith("gap:2026-10-11..2026-10-17 91/91 cursor=2026-10-17"), seq[7]);
+  assert.ok(seq[8].startsWith("recent:2026-10-18..2026-10-21 91/91 cursor=2026-10-21"), seq[8]);
+  assert.equal(cursor, TODAY);
+  console.log("8 simulated catch-up loop:\n    " + seq.join("\n    "));
 }
 
 console.log(`ALL CHECKS PASSED (TZ=${process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone})`);

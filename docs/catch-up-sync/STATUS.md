@@ -137,3 +137,68 @@ Spot-checks (real output must be recorded; DB results builder-reported, PM has n
 8. Lock released after an induced failure (lock_until null or past after the call).
 
 Phase 2 sign-off requires: tsc/build output, spot-check outputs above, no unresolved BLOCKING review findings, git diff --stat limited to the sync action/route, catch-up/sync lib files, optional client.ts typed error, and sync_state-related files (excluding pre-existing unrelated files), max two fix rounds.
+
+## Phase 2: sync-step endpoint
+
+Status: DONE. Decision: GO to Phase 3.
+
+### PM-verified (read-only, this session)
+- `git diff --cached --stat`: exactly 12 files, 439 insertions / 8 deletions, all in scope: scripts/catch-up-check.ts, src/app/actions/sync.ts, src/app/api/sync/step/route.ts, src/app/dashboard/components/sync-button.tsx, src/lib/google/{client,errors}.ts, src/lib/sync/{catch-up,step-types,activity-summaries,sync-state,range,step}.ts.
+- `git diff --cached --name-only | grep persist`: empty. `git diff HEAD --stat -- src/lib/sync/persist.ts src/lib/analytics src/lib/scoring`: empty. AZM upsert conflict sets unchanged (spot-check 7 PASS); scope guard respected.
+- `grep -rn ensureNightSamples src/lib/sync src/app/api`: no matches (carry-forward (i) PASS; legacy runGoogleSync in src/app/actions/sync.ts still calls it, unchanged).
+- `grep` for react/next/db/drizzle/pg imports in catch-up.ts, step-types.ts, activity-summaries.ts: none (pure).
+- Re-ran `TZ=Europe/Lisbon npx tsx scripts/catch-up-check.ts`: ALL CHECKS PASSED; simulated loop recent, 7 gap chunks, closing recent, cursor ends 2026-10-21.
+- Re-ran `npx tsc --noEmit`: clean (exit 0).
+
+### Builder-reported (PM has no DB/Google access; not PM-verified)
+- Gate: `npm run build` compiled with `ƒ /api/sync/step`; staged-tree tsc OK after final review fixes.
+- Design: POST /api/sync/step; runSyncStep = acquireSyncLock (single conditional UPDATE, DB NOW()+2min) -> readSyncState -> planCatchUp -> pickNextUnit -> syncDateRange (allSettled sleep/heart/zones in <=7-day windows/steps; any rejection throws, auth errors preferred) -> existing persist functions -> last_synced_at only for recent units -> advanceCursor only after success -> lock released in finally. Typed GoogleAuthError -> auth_required. syncFromGoogle() with no `days` runs one forced recent step; with `days` the legacy runGoogleSync (/api/sync?days=N) is unchanged.
+- SC1 live loop: gap 07-19..08-01 14/91, 08-02..08-15 28/91, 08-16..08-29 42/91, 08-30..09-12 56/91, 09-13..09-26 70/91, 09-27..10-10 84/91, 10-11..10-17 91/91, recent 10-18..10-21 91/91, idle. Chunks 2.5-17s each.
+- SC2: sleep_sessions per month 07:24 08:33 09:30 10:16; activity rows 07:25 08:31 09:30 10:17 (with zones 25/31/30/16); sync_state synced_through 2026-10-21, lock_until null.
+- SC3: two parallel forced POSTs -> running(recent) and busy. SC4: 10-14..10-17 now hold real AZM (e.g. 10-17 light 632 moderate 37; 10-16 zero-zone genuinely, steps 9421); 10-18 light 57 -> 1269 (new whole-local-day window). Light-minutes mapping remains the known open question. SC5: invalid_grant, no linked account -> auth_required (offline, stubbed fetch); "No refresh token" sites by static inspection only. SC6/8: induced 500s -> kind=error, lock released, cursor and clock unchanged, no data written; parallel acquire {true,false}. SC7: no HR samples written by catch-up.
+- Review (stand-in): BLOCKING none; fix rounds used 0 of 2. Fixed: release failure no longer replaces result, SyncButton try/catch, explicit POST return type, window comment.
+
+### Carry-forwards (i)-(x)
+(i) PASS grep. (ii) PASS (allSettled, any rejection throws; induced failure). (iii) PASS (<=7-day zone windows). (iv) PASS (civil-date windows, range.ts). (v) PASS (typed GoogleAuthError; 403 intentionally not mapped). (vi) PASS (6h rule via last_synced_at). (vii) PASS (builder-reported SC4). (viii) PASS by fixture loop (cursor ends today). (ix) PASS by design (null -> recent only). (x) PASS (finally release, atomic UPDATE, builder-reported SC3/SC8).
+
+### Deviations
+- D1: agents unregistered (as before). D2: gap ends today-4 (accepted Phase 1). D4: additive `unit` field on 'running' in the wire union. D5: recent window does not call ensureNightSamples (SPEC), so Today's last-night score may show the 'partial' indicator until the sleep page is opened (it lazily fetches). D6: syncFromGoogle() (Sync button/AutoSync) is now all-or-nothing and no longer calls ensureNightSamples; /api/sync?days=N is the unchanged legacy path (stamps last_synced_at, does not move synced_through). D7: sync-button.tsx got a try/catch.
+- Note: a third forced sync was triggered accidentally during the concurrency test (harmless idempotent recent-window run).
+
+### Open questions for Gisete
+- Q5 (from D5): accept that Today's last-night HR-sample score may show 'partial' until the sleep page is opened, or schedule a follow-up that fetches night samples outside catch-up?
+- Q6: 403 from Google is left as a generic error (scope issue), not auth_required. Acceptable?
+- Q7: Lock steal after 2-min TTL is possible only if a step outlives it (chunks take <=17s); release is not token-based. Acceptable?
+- Q4 (server tz): Phase 0 verified server tz Europe/Lisbon per builder; zone windows rely on server tz = user tz.
+
+### Decision: GO to Phase 3
+
+## Next phase criteria: Phase 3 (UI)
+
+Acceptance criteria (from SPEC):
+- One layout-level client component in src/app/dashboard/layout.tsx replaces the five per-page AutoSync triggers (dashboard/page.tsx, sleep/page.tsx, heart/page.tsx, sleep/heart-rate/page.tsx, today/page.tsx). On mount it POSTs /api/sync/step in a loop while the result is 'running', then router.refresh() once on 'idle' only.
+- Banner (token classes, tw-animate-css enter): "Catching up: <from> -> <to>, X of Y days" with a progress bar. Nothing shown for a plain recent-window sync finishing under ~2s; small inline "Syncing..." otherwise.
+- auth_required (also an HTTP 401 from the route) -> banner with "Reconnect Google" button using the existing sign-in flow; stop looping.
+- error -> banner with Retry; stop looping; never auto-retry in a tight loop. busy -> poll every few seconds, at most ~1 minute, then stop with a message.
+- Banner state/text logic in a pure src/lib module (plain data in, JSON-safe out, explicit return types) with tsx fixtures; component only renders. Dates formatted via src/lib/format.ts (add a helper there if needed; no inline toLocale*).
+- The manual SyncButton keeps working (and does not fight the layout loop).
+- Scope guard: no changes to src/lib/sync/persist.ts, scoring, analytics, step.ts semantics. AGENTS.md conventions (no any, token classes, layering). tsc and build pass.
+
+Carry-forward (PM will check each):
+- (a) Client sends force:true only on the FIRST call, or never; otherwise the loop runs the recent window forever.
+- (b) previousTotal is echoed from the prior running response on each subsequent call.
+- (c) Loop stops on every terminal kind (idle, auth_required, error), on unmount (abort/cancel flag, no setState after unmount, no double loop under React strict-mode double effect), and busy polling is bounded.
+- (d) router.refresh() exactly once, on idle, and not on error/auth/busy timeout.
+- (e) Exactly one trigger remains: grep for AutoSync/old trigger in the five pages is empty; the old auto-sync.tsx is removed or unused.
+- (f) Reconnect Google reuses the existing sign-in flow (no new auth code).
+- (g) Staleness is decided server-side by the step route (6h rule); the layout component must not add a second client staleness rule that suppresses catch-up when synced_through lags.
+
+Spot-checks (record real output):
+1. Pure-module fixtures via `npx tsx`: running (with/without previousTotal), idle, busy (with elapsed), auth_required, error, quick recent window hidden vs slow "Syncing...", progress percent bounds (0-100, daysTotal 0).
+2. grep evidence for (e) and for a single layout-level mount in src/app/dashboard/layout.tsx.
+3. Chrome (if the extension is connected): set sync_state.synced_through back 30 days (record original value first), open /dashboard/today, screenshot the banner mid-progress and after completion, then RESTORE synced_through and confirm lock_until null. If Chrome is unavailable, state so and mark unverified.
+4. Failure UI: simulate error and auth_required (e.g. stubbed route response in the browser) and screenshot the Retry and Reconnect banners; no tight retry loop (network log shows no repeated calls).
+5. Manual SyncButton click still works (builder-reported).
+6. tsc --noEmit and npm run build pass.
+
+Phase 3 sign-off requires: tsc/build output, spot-check outputs, no unresolved BLOCKING review findings (max two fix rounds), git diff --stat limited to src/app/dashboard/layout.tsx, the new client component, the pure src/lib module (plus fixtures script), format.ts helper if needed, and removal/edits of the five page triggers (excluding pre-existing unrelated files; note several of those pages, e.g. sleep/page.tsx, already carry unrelated unstaged edits, so the builder must stage only its own hunks).

@@ -2,6 +2,7 @@ import { db } from "@/db/client";
 import { accounts } from "@/db/schema";
 import { addDays } from "@/lib/dates";
 import { eq, and } from "drizzle-orm";
+import { GoogleAuthError } from "./errors";
 import type {
   GoogleHealthSessionBlock,
   GoogleHealthHeartRateDataPoint,
@@ -24,7 +25,12 @@ async function refreshGoogleAccessToken(userId: string, refreshToken: string) {
   });
 
   const tokens = await response.json();
-  if (!response.ok) throw new Error(`Token refresh failed: ${JSON.stringify(tokens)}`);
+  if (!response.ok) {
+    const message = `Token refresh failed: ${JSON.stringify(tokens)}`;
+    // invalid_grant = the refresh token was revoked or expired; only a new sign-in fixes it.
+    if (tokens?.error === "invalid_grant") throw new GoogleAuthError(message);
+    throw new Error(message);
+  }
 
   const expiresAt = Math.floor(Date.now() / 1000) + tokens.expires_in;
 
@@ -51,7 +57,7 @@ export async function getGoogleValidClientToken(userId: string): Promise<string>
   });
 
   if (!account || !account.refresh_token) {
-    throw new Error("User does not have a linked Google Account session.");
+    throw new GoogleAuthError("User does not have a linked Google Account session.");
   }
 
   const isExpired = account.expires_at ? Math.floor(Date.now() / 1000) >= account.expires_at : true;
@@ -122,14 +128,17 @@ async function fetchHealthDataType(
       const account = await db.query.accounts.findFirst({
         where: and(eq(accounts.userId, userId), eq(accounts.provider, "google")),
       });
-      if (!account?.refresh_token) throw new Error("No refresh token available.");
+      if (!account?.refresh_token) throw new GoogleAuthError("No refresh token available.");
       accessToken = await refreshGoogleAccessToken(userId, account.refresh_token);
       response = await doFetch(accessToken, pageToken);
     }
 
     if (!response.ok) {
       const errorDetails = await response.text();
-      throw new Error(`Google Health API error [${dataType}]: ${response.status} - ${errorDetails}`);
+      const message = `Google Health API error [${dataType}]: ${response.status} - ${errorDetails}`;
+      // Still 401 after a fresh token: the grant itself is bad.
+      if (response.status === 401) throw new GoogleAuthError(message);
+      throw new Error(message);
     }
 
     const data = await response.json();
@@ -274,12 +283,14 @@ export async function fetchGoogleDailySteps(
       const account = await db.query.accounts.findFirst({
         where: and(eq(accounts.userId, userId), eq(accounts.provider, "google")),
       });
-      if (!account?.refresh_token) throw new Error("No refresh token available.");
+      if (!account?.refresh_token) throw new GoogleAuthError("No refresh token available.");
       accessToken = await refreshGoogleAccessToken(userId, account.refresh_token);
       response = await doFetch(accessToken);
     }
     if (!response.ok) {
-      throw new Error(`Google Health API error [steps dailyRollUp]: ${response.status} - ${await response.text()}`);
+      const message = `Google Health API error [steps dailyRollUp]: ${response.status} - ${await response.text()}`;
+      if (response.status === 401) throw new GoogleAuthError(message);
+      throw new Error(message);
     }
 
     const data = await response.json();

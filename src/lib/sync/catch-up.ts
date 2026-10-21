@@ -102,3 +102,51 @@ export function deriveSyncedThrough(coveredDates: readonly string[], today: stri
   while (day >= earliest && !covered.has(day)) day = addDays(day, -1);
   return day >= earliest ? day : null;
 }
+
+/** One unit of catch-up work: the recent window or the oldest gap chunk. */
+export interface SyncUnit {
+  kind: "recent" | "gap";
+  range: DateRange;
+}
+
+export interface NextUnitInput {
+  syncedThrough: string | null;
+  today: string;
+  /** The existing 6-hour staleness rule says the recent window is due. */
+  stale: boolean;
+  /** Manual Sync button: always run the recent window. */
+  force: boolean;
+}
+
+/**
+ * Chooses the single next unit of work, or null when fully caught up.
+ *  1. Recent window when forced or stale (it keeps today fresh; the cursor
+ *     rule stops it advancing syncedThrough while a gap precedes it).
+ *  2. Otherwise the oldest gap chunk.
+ *  3. Otherwise, if the cursor still lags today (the gap just closed, or a
+ *     new day began), the recent window once more so it can advance the cursor.
+ */
+export function pickNextUnit(plan: CatchUpPlan, input: NextUnitInput): SyncUnit | null {
+  if (input.force || input.stale) return { kind: "recent", range: plan.recent };
+  if (plan.gapChunks.length > 0) return { kind: "gap", range: plan.gapChunks[0] };
+  const lagging = input.syncedThrough !== null && input.syncedThrough < input.today;
+  return lagging ? { kind: "recent", range: plan.recent } : null;
+}
+
+export interface GapProgress {
+  daysDone: number;
+  daysTotal: number;
+}
+
+/**
+ * Stateless progress for the gap fill: the client echoes back the largest
+ * total it has seen, so the total stays fixed while the remaining gap shrinks.
+ */
+export function gapProgress(
+  previousTotal: number,
+  gapDaysBefore: number,
+  gapDaysRemaining: number,
+): GapProgress {
+  const daysTotal = Math.max(previousTotal, gapDaysBefore);
+  return { daysDone: Math.max(0, daysTotal - gapDaysRemaining), daysTotal };
+}
