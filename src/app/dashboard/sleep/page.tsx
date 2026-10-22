@@ -1,5 +1,6 @@
 "use server";
 
+import { PageShell, PageTitle } from "../components/page-shell";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { auth } from "@/auth";
@@ -106,11 +107,11 @@ export default async function SleepPage({
     : [];
 
   return (
-    <div className="p-margin-mobile md:p-margin-desktop max-w-7xl mx-auto space-y-8 py-10 pb-24">
+    <PageShell>
 
       {/* Page headline */}
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="font-display text-[44px] font-normal leading-none text-on-surface tracking-[-0.025em]">Sleep Intelligence</h1>
+        <PageTitle>Sleep Intelligence</PageTitle>
         <div className="flex items-center gap-2.5">
           <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
         </div>
@@ -331,6 +332,6 @@ export default async function SleepPage({
 
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

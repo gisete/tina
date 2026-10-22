@@ -1,5 +1,6 @@
 "use server";
 
+import { PageShell, PageTitle } from "../../components/page-shell";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
@@ -57,7 +58,7 @@ export default async function HeartRateDetailPage({
   const summaries = await readHrSummaries(userId, trendStartDate, today);
 
   return (
-    <div className="p-margin-mobile md:p-margin-desktop max-w-7xl mx-auto py-10 pb-24 space-y-6">
+    <PageShell>
 
       {/* Back link */}
       <Link
@@ -71,7 +72,7 @@ export default async function HeartRateDetailPage({
         <>
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
-              <h1 className="font-display text-4xl font-bold text-black mb-2 tracking-tight">Overnight Heart Rate</h1>
+              <PageTitle className="mb-2">Overnight Heart Rate</PageTitle>
               <p className="text-base text-on-surface-variant max-w-xl">
                 Beats per minute across the night. Dips below the dashed line mark restorative stretches.
               </p>
@@ -92,7 +93,7 @@ export default async function HeartRateDetailPage({
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
-              <h1 className="font-display text-4xl font-bold text-black mb-2 tracking-tight">Overnight Heart Rate</h1>
+              <PageTitle className="mb-2">Overnight Heart Rate</PageTitle>
               <p className="text-base text-on-surface-variant max-w-xl">
                 {data.lastNight ? (
                   <>
@@ -182,6 +183,6 @@ export default async function HeartRateDetailPage({
           <RecoveryBalanceChart summaries={summaries} />
         </>
       )}
-    </div>
+    </PageShell>
   );
 }

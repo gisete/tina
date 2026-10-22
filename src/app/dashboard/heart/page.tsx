@@ -1,5 +1,6 @@
 "use server";
 
+import { PageShell, PageTitle } from "../components/page-shell";
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import { readActivitySummaries } from "@/lib/sync/read";
@@ -60,12 +61,12 @@ export default async function HeartPage({
   const hasHeartData = daily.length > 0;
 
   return (
-    <div className="p-margin-mobile md:p-margin-desktop max-w-7xl mx-auto space-y-6 py-10 pb-24">
+    <PageShell>
 
       {/* Page Headline */}
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-4xl font-bold text-black mb-2 tracking-tight">Heart Health</h1>
+          <PageTitle className="mb-2">Heart Health</PageTitle>
           <p className="text-base text-on-surface-variant max-w-2xl">
             Monitor resting heart rate and HRV trends to gauge cardiovascular fitness and daily autonomic recovery load.
           </p>
@@ -165,6 +166,6 @@ export default async function HeartPage({
 
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

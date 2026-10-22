@@ -1,5 +1,6 @@
 "use server";
 
+import { PageShell, PageTitle } from "./components/page-shell";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
@@ -66,12 +67,12 @@ export default async function DashboardOverviewPage() {
   const heartStatus  = hasData ? (data!.heart?.latestStatus ?? "Insufficient Data") : "Insufficient Data";
 
   return (
-    <div className="p-margin-mobile md:p-margin-desktop max-w-7xl mx-auto py-10 pb-24">
+    <PageShell>
 
       {/* Page Headline */}
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-4xl font-bold text-on-surface tracking-tight mb-2">Overview</h1>
+          <PageTitle className="mb-2">Overview</PageTitle>
           <p className="font-sans text-base text-on-surface-variant max-w-2xl">
             Your personal health intelligence hub. Select a module to explore your data.
           </p>
@@ -206,6 +207,6 @@ export default async function DashboardOverviewPage() {
         </div>
 
       </div>
-    </div>
+    </PageShell>
   );
 }

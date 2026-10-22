@@ -1,3 +1,4 @@
+import { PageShell, PageTitle } from "../components/page-shell";
 import { auth } from "@/auth";
 import { readPlan } from "@/lib/today/read";
 import ExpandableCard from "../components/expandable-card";
@@ -20,9 +21,9 @@ export default async function PlanPage() {
   const strategies = plan.mindset.length - mantras;
 
   return (
-    <div className="p-margin-mobile md:p-margin-desktop max-w-4xl mx-auto space-y-6 py-10 pb-24">
+    <PageShell>
       <div>
-        <h1 className="font-display text-4xl font-bold text-on-surface tracking-tight">Plan</h1>
+        <PageTitle className="mb-2">Plan</PageTitle>
         <p className="mt-1 text-sm text-on-surface-variant">
           Templates for your Today screen. Past days keep the text they were logged with.
         </p>
@@ -63,6 +64,6 @@ export default async function PlanPage() {
       >
         <MotivationSection lines={plan.motivation} />
       </ExpandableCard>
-    </div>
+    </PageShell>
   );
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { PageShell, PageTitle } from "../../components/page-shell";
 import { Suspense } from "react";
 import Link from "next/link";
 import { auth } from "@/auth";
@@ -30,7 +31,7 @@ export default async function SleepDebtPage({
     "bg-surface-container text-on-surface-variant";
 
   return (
-    <div className="p-margin-mobile md:p-margin-desktop max-w-7xl mx-auto py-10 pb-24 space-y-6">
+    <PageShell>
 
       {/* Back link */}
       <Link
@@ -43,7 +44,7 @@ export default async function SleepDebtPage({
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
-          <h1 className="font-display text-4xl font-bold text-black mb-2 tracking-tight">Sleep Debt</h1>
+          <PageTitle className="mb-2">Sleep Debt</PageTitle>
           <p className="text-base text-on-surface-variant max-w-xl">
             Decay-weighted deficit over the last 14 nights. Recent bad nights weigh more; a surplus night
             recovers debt at half-efficiency.
@@ -96,6 +97,6 @@ export default async function SleepDebtPage({
         <p>Severity: &lt; 5 hrs = optimal · 5–10 hrs = moderate · &gt; 10 hrs = high.</p>
       </div>
 
-    </div>
+    </PageShell>
   );
 }

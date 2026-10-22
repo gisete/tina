@@ -32,6 +32,12 @@
   --color-sleep-surface-strong: #cfd1f0;
   --color-sleep-surface-soft: #e6e7f7;
   --color-hairline: #ece9e2;
+
+  /* Sidebar */
+  --color-nav-active: #ece9e2;
+  --color-nav-ink: #1b1a17;
+  --color-nav-text: #3d3a35;
+  --color-sidebar-border: #e8e5de;
   --color-heart-surface: #d0e8ee;
   --color-heart-ink: #0f3a47;
   --color-heart-muted: #3a6877;
@@ -55,7 +61,7 @@
   --radius-card: 28px;
 
   /* Spacing Scale Extensions */
-  --spacing-sidebar-width: 260px;
+  --spacing-sidebar-width: 248px;
   --spacing-card-padding: 24px;
   --spacing-margin-desktop: 40px;
   --spacing-margin-mobile: 16px;
