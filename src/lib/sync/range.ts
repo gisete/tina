@@ -1,5 +1,5 @@
 // Fetches and persists one inclusive range of local dates from Google Health.
-// Used by the catch-up step only. Throws unless EVERY fetch and persist
+// Used by the catch-up step and the manual ?days=N range sync. Throws unless EVERY fetch and persist
 // succeeded, so a caller can treat a normal return as "range fully synced".
 // Never fetches intra-night heart-rate samples.
 
@@ -27,21 +27,43 @@ import { addDays, parseLocalDate } from "@/lib/dates";
 /**
  * Days per zone request window. Zone data is ~1 point per worn minute and the
  * page helper silently stops at 20 pages x 1000 points, so a window must stay
- * well under that (7 days ≈ 10,100 points ≈ 11 pages).
+ * well under that (7 days + 2 padding days ≈ 13,000 points ≈ 13 pages).
  */
 const ZONE_WINDOW_DAYS = 7;
 
 /** Instant of local midnight at the start of a civil date (an instant, not a calendar date). */
 const localMidnightISO = (date: string): string => parseLocalDate(date).toISOString();
 
+/** The API's own civil date for a zone point ("YYYY-MM-DD"), or null when absent. */
+function zonePointCivilDate(pt: GoogleZoneMinutePoint): string | null {
+  const d = pt.timeInHeartRateZone?.interval?.civilStartTime?.date;
+  if (!d?.year || !d?.month || !d?.day) return null;
+  return `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+}
+
+/**
+ * Zones are requested per 7-day window, padded by one day on each side, and
+ * each window keeps only points whose API civil date falls inside it. Google
+ * assigns civil dates in the device's timezone, which can differ from the
+ * server's: filtering by server-local-midnight instants alone then drops the
+ * early hours of a window's first day (seen as ~8h missing on travel days).
+ * Padding fetches the whole day; filtering by civil date keeps every day in
+ * exactly one window, so seams never double-count.
+ */
 async function fetchZonesInWindows(userId: string, from: string, to: string): Promise<GoogleZoneMinutePoint[]> {
   const points: GoogleZoneMinutePoint[] = [];
   for (let start = from; start <= to; start = addDays(start, ZONE_WINDOW_DAYS)) {
     const last = addDays(start, ZONE_WINDOW_DAYS - 1);
     const end = last < to ? last : to;
-    points.push(
-      ...(await fetchGoogleZoneRecords(userId, localMidnightISO(start), localMidnightISO(addDays(end, 1)))),
+    const fetched = await fetchGoogleZoneRecords(
+      userId,
+      localMidnightISO(addDays(start, -1)),
+      localMidnightISO(addDays(end, 2)),
     );
+    for (const pt of fetched) {
+      const date = zonePointCivilDate(pt);
+      if (date !== null && date >= start && date <= end) points.push(pt);
+    }
   }
   return points;
 }

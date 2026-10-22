@@ -3,40 +3,13 @@
 import { auth } from "@/auth";
 import { db } from "@/db/client";
 import { sleepSessions, heartRateSummaries, syncState } from "@/db/schema";
-import {
-  fetchGoogleSleepData,
-  fetchGoogleHeartData,
-  fetchGoogleZoneRecords,
-  fetchGoogleDailySteps,
-} from "@/lib/google/client";
-import {
-  normalizeGoogleSleepSessions,
-  normalizeHeartData,
-  normalizeZoneRecords,
-  normalizeDailySteps,
-} from "@/lib/google/normalizers";
 import { runSyncStep } from "@/lib/sync/step";
-import { ensureNightSamples, ensureLatestNightSamples } from "@/lib/sync/night-samples";
-import { persistHealthRecords, persistActivitySummaries, persistDailySteps } from "@/lib/sync/persist";
-import { aggregateZoneMinutes } from "@/lib/analytics/activity";
+import { ensureNightSamples } from "@/lib/sync/night-samples";
 import { assembleDashboardData } from "@/lib/sync/assemble";
 import { selectMainSessions, buildDebtHistory, calculateSleepDebt } from "@/lib/analytics/sleep";
 import { localToday, addDays } from "@/lib/dates";
-import { eq, and, asc, desc, gte, lt, lte, sql } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lt, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-
-/**
- * How many days back to fetch from Google on each sync. Older sessions are
- * settled data that won't change; only the reconciliation window needs
- * refreshing on every call.
- */
-const RECONCILE_WINDOW_DAYS = 3;
-
-/**
- * Hours before the last sync is considered stale enough to trigger an
- * automatic background sync on the today view.
- */
-const STALE_AFTER_HOURS = 6;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // READ PATH — no Google calls except ensureNightSamples (see src/lib/sync/night-samples.ts)
@@ -114,152 +87,26 @@ export async function readDashboardData(targetDate?: string) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SYNC PATH — fetches from Google, persists, updates the sync clock
+// SYNC PATH — Sync button action
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Core sync: fetches sessions from Google Health, normalizes, persists (upsert
- * on startTime), and fills the HR sample cache for the most recent night if
- * sparse. Returns void — callers re-read via readDashboardData after this.
+ * Server action: one forced recent-window sync step followed by dashboard
+ * cache invalidation (the Sync button). Wider manual ranges go through
+ * /api/sync?days=N (src/lib/sync/range-sync.ts).
  *
- * Does NOT touch the Next.js cache, so it is safe to call during render (the
- * auto-sync path in loadPageData does exactly that). Non-render callers that
- * need sibling routes invalidated use {@link syncFromGoogle} instead.
- *
- * @param days - How many days back to fetch. Defaults to RECONCILE_WINDOW_DAYS
- *   (3). Pass a wider value only for DB recovery / first-time backfill; normal
- *   page loads and the Sync button always use the default.
+ * Call ONLY from non-render contexts. revalidatePath is unsupported during
+ * render, so render-time callers must NOT call this; the layout-level
+ * <CatchUpSync> client component fires the sync post-render where
+ * revalidatePath is legal.
  */
-async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number } = {}): Promise<void> {
+export async function syncFromGoogle(): Promise<void> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
-  const userId = session.user.id;
-
-  const endDate = new Date();
-  const startDate = new Date(endDate);
-  startDate.setDate(endDate.getDate() - days);
-  const startISO = startDate.toISOString();
-  const endISO = endDate.toISOString();
-
-  // Steps are keyed by civil date; end is exclusive so tomorrow includes today.
-  const stepsStartDate = addDays(localToday(), -days);
-  const stepsEndExclusive = addDays(localToday(), 1);
-
-  const [sleepResult, heartResult, zoneResult, stepsResult] = await Promise.allSettled([
-    fetchGoogleSleepData(userId, startISO, endISO),
-    fetchGoogleHeartData(userId, startISO, endISO),
-    fetchGoogleZoneRecords(userId, startISO, endISO),
-    fetchGoogleDailySteps(userId, stepsStartDate, stepsEndExclusive),
-  ]);
-
-  if (sleepResult.status === "rejected") throw sleepResult.reason;
-  if (heartResult.status === "rejected") {
-    console.warn(
-      "[sync] Heart data fetch failed (continuing):",
-      heartResult.reason?.message ?? heartResult.reason
-    );
-  }
-  if (zoneResult.status === "rejected") {
-    console.warn(
-      "[sync] Zone minutes fetch failed (continuing):",
-      zoneResult.reason?.message ?? zoneResult.reason
-    );
-  }
-  if (stepsResult.status === "rejected") {
-    console.warn(
-      "[sync] Steps fetch failed (continuing):",
-      stepsResult.reason?.message ?? stepsResult.reason
-    );
-  }
-  const rawHeartData = heartResult.status === "fulfilled" ? heartResult.value : null;
-  const rawZonePoints = zoneResult.status === "fulfilled" ? zoneResult.value : [];
-
-  const normalizedSleep = normalizeGoogleSleepSessions(userId, sleepResult.value);
-  const heartRecords = rawHeartData
-    ? normalizeHeartData(userId, rawHeartData.heartRatePoints, rawHeartData.hrvPoints)
-    : [];
-
-  console.log(
-    `[sync] Normalized: ${normalizedSleep.length} sleep sessions, ${heartRecords.length} heart records`
-  );
-
-  if (process.env.SYNC_DEBUG === "1") {
-    for (const { session: s } of normalizedSleep) {
-      console.log(
-        `[sync:debug] normalized  startTime=${s.startTime.toISOString()}  sleepDate=${s.sleepDate}`
-      );
-    }
-  }
-
-  await persistHealthRecords(userId, normalizedSleep, heartRecords);
-
-  // Aggregate zone-minute records by civil date and upsert one row per day.
-  if (rawZonePoints.length > 0) {
-    const zoneRecords = normalizeZoneRecords(rawZonePoints);
-    // Group by civil date (already extracted from the API's civilStartTime.date).
-    const byDate = new Map<string, typeof zoneRecords>();
-    for (const r of zoneRecords) {
-      const bucket = byDate.get(r.civilDate) ?? [];
-      bucket.push(r);
-      byDate.set(r.civilDate, bucket);
-    }
-    const activitySummaries = [...byDate.entries()].map(([activityDate, recs]) => {
-      const zones = aggregateZoneMinutes(recs);
-      return {
-        activityDate,
-        lightMinutes:    zones.light,
-        moderateMinutes: zones.moderate,
-        vigorousMinutes: zones.vigorous,
-        peakMinutes:     zones.peak,
-      };
-    });
-    await persistActivitySummaries(userId, activitySummaries);
-  }
-
-  if (stepsResult.status === "fulfilled") {
-    try {
-      await persistDailySteps(userId, normalizeDailySteps(stepsResult.value));
-    } catch (err) {
-      console.warn("[sync] Steps persist failed (continuing):", err instanceof Error ? err.message : err);
-    }
-  }
-
-  // Populate the HR sample cache for the most-recent main session if sparse.
-  await ensureLatestNightSamples(userId);
-
-  // Stamp the sync clock so the staleness guard knows when we last ran.
-  await db
-    .insert(syncState)
-    .values({ userId, lastSyncedAt: new Date() })
-    .onConflictDoUpdate({
-      target: syncState.userId,
-      set: { lastSyncedAt: sql`NOW()` },
-    });
-
-}
-
-/**
- * Server action: full sync followed by dashboard cache invalidation.
- *
- * Call ONLY from non-render contexts — the Sync button and the /api/sync route.
- * revalidatePath is unsupported during render, so the auto-sync inside
- * render-time callers must NOT call this directly — use the layout-level <CatchUpSync> client
- * component instead, which fires post-render where revalidatePath is legal.
- */
-export async function syncFromGoogle(opts: { days?: number } = {}): Promise<void> {
-  if (opts.days === undefined) {
-    // Sync button / auto-sync: one forced recent-window step, the same logic
-    // the catch-up endpoint uses (lock, cursor rule, all-or-nothing).
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-    const result = await runSyncStep(session.user.id, { force: true });
-    if (result.kind === "auth_required") throw new Error("Google sign-in expired. Please reconnect.");
-    if (result.kind === "error") throw new Error(result.message);
-    // busy: another step is already syncing; nothing to do.
-  } else {
-    // /api/sync?days=N recovery path, unchanged.
-    await runGoogleSync(opts);
-  }
+  const result = await runSyncStep(session.user.id, { force: true });
+  if (result.kind === "auth_required") throw new Error("Google sign-in expired. Please reconnect.");
+  if (result.kind === "error") throw new Error(result.message);
+  // busy: another step is already syncing; nothing to do.
 
   // Invalidate server-side page caches so the next navigation gets fresh data.
   revalidatePath("/dashboard");
@@ -268,43 +115,17 @@ export async function syncFromGoogle(opts: { days?: number } = {}): Promise<void
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGE HELPER — staleness guard + read in one call
+// PAGE HELPER
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * The single entry point for dashboard pages. Reads Postgres and computes
- * analytics — no Google calls, no DB writes, no revalidatePath. Render-safe.
- *
- * Returns `shouldAutoSync: true` only when (a) the selected date is today and
- * (b) the sync clock is older than STALE_AFTER_HOURS. The caller renders a
- * client-side trigger (now the layout-level <CatchUpSync>, which ignores this flag) that fires the actual sync after paint,
- * where revalidatePath is legal.
- *
- * Historical dates (any targetDate ≠ today) always return shouldAutoSync=false
- * so navigating past nights never triggers a Google call.
+ * analytics — no Google calls (bar the cached night-sample fill), no DB
+ * writes, no revalidatePath. Render-safe. Syncing is the layout-level
+ * <CatchUpSync>'s job, not the page's.
  */
 export async function loadPageData(targetDate?: string) {
-  const authSession = await auth();
-  if (!authSession?.user?.id) throw new Error("Unauthorized");
-  const userId = authSession.user.id;
-
-  // Staleness decision — pure read, no side effects.
-  // localToday() returns a local-tz YYYY-MM-DD string; never use toISOString()
-  // for calendar-date comparisons.
-  const isToday = !targetDate || targetDate === localToday();
-  let shouldAutoSync = false;
-  if (isToday) {
-    const syncRow = await db.query.syncState.findFirst({
-      where: eq(syncState.userId, userId),
-    });
-    const staleMs = STALE_AFTER_HOURS * 60 * 60 * 1000;
-    shouldAutoSync =
-      !syncRow?.lastSyncedAt ||
-      Date.now() - syncRow.lastSyncedAt.getTime() > staleMs;
-  }
-
-  const data = await readDashboardData(targetDate);
-  return { ...data, shouldAutoSync };
+  return readDashboardData(targetDate);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { addDays, diffDays } from "@/lib/dates";
 
 /**
  * Days back from today that the routine "recent" sync always re-fetches
- * (today − 3 .. today, the same span runGoogleSync has always used).
+ * (today − 3 .. today, the span every routine sync has always used).
  */
 export const RECENT_WINDOW_DAYS = 3;
 
@@ -38,6 +38,20 @@ function range(from: string, to: string): DateRange {
 }
 
 /**
+ * Splits an inclusive civil-date range into consecutive chunks of at most
+ * chunkDays, oldest first, with no overlap and no hole. Empty when from > to.
+ */
+export function splitRange(from: string, to: string, chunkDays: number = CHUNK_DAYS): DateRange[] {
+  const chunks: DateRange[] = [];
+  const step = Math.max(1, chunkDays); // a non-positive size would never advance
+  for (let start = from; start <= to; start = addDays(start, step)) {
+    const end = addDays(start, step - 1);
+    chunks.push(range(start, end < to ? end : to));
+  }
+  return chunks;
+}
+
+/**
  * Builds the catch-up plan. The gap ends the day before the recent window
  * starts so chunks and the recent window never overlap and leave no hole.
  */
@@ -48,16 +62,8 @@ export function planCatchUp(
   chunkDays: number = CHUNK_DAYS,
 ): CatchUpPlan {
   const recent = range(addDays(today, -recentWindowDays), today);
-  const gapChunks: DateRange[] = [];
-  const step = Math.max(1, chunkDays); // a non-positive size would never advance
-
-  if (syncedThrough !== null) {
-    const gapEnd = addDays(recent.from, -1);
-    for (let from = addDays(syncedThrough, 1); from <= gapEnd; from = addDays(from, step)) {
-      const chunkEnd = addDays(from, step - 1);
-      gapChunks.push(range(from, chunkEnd < gapEnd ? chunkEnd : gapEnd));
-    }
-  }
+  const gapEnd = addDays(recent.from, -1);
+  const gapChunks = syncedThrough === null ? [] : splitRange(addDays(syncedThrough, 1), gapEnd, chunkDays);
 
   return {
     recent,

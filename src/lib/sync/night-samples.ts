@@ -74,7 +74,7 @@ export async function ensureNightSamples(
 
 /**
  * Populates the HR sample cache for the most-recent main session if sparse.
- * Selection mirrors the block runGoogleSync always used: the 5 newest sessions
+ * Selection: the 5 newest sessions
  * by sleep_date, then the first main session among them.
  */
 export async function ensureLatestNightSamples(userId: string): Promise<void> {

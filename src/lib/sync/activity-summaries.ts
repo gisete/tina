@@ -1,5 +1,5 @@
 // Pure: raw zone-minute points → one activity-summary row per civil day.
-// Same aggregation runGoogleSync applies inline; zone mapping is unchanged.
+// Aggregates zone-minute points into per-day rows; zone mapping lives in aggregateZoneMinutes.
 
 import { normalizeZoneRecords, type GoogleZoneMinutePoint } from "@/lib/google/normalizers";
 import { aggregateZoneMinutes } from "@/lib/analytics/activity";

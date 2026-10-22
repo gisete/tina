@@ -29,5 +29,5 @@ export function isSyncStale(lastSyncedAtMs: number | null, nowMs: number, staleA
   return lastSyncedAtMs === null || nowMs - lastSyncedAtMs > staleAfterHours * 3_600_000;
 }
 
-/** Hours before the sync clock counts as stale — matches STALE_AFTER_HOURS in the sync action. */
+/** Hours before the sync clock counts as stale — the single source for the catch-up staleness rule. */
 export const TODAY_STALE_AFTER_HOURS = 6;

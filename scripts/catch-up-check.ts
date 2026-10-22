@@ -10,6 +10,7 @@ import {
   gapProgress,
   pickNextUnit,
   planCatchUp,
+  splitRange,
 } from "@/lib/sync/catch-up";
 
 const TODAY = "2026-10-21";
@@ -174,6 +175,16 @@ function assertTiles(syncedThrough: string, today: string): void {
   assert.ok(seq[8].startsWith("recent:2026-10-18..2026-10-21 91/91 cursor=2026-10-21"), seq[8]);
   assert.equal(cursor, TODAY);
   console.log("8 simulated catch-up loop:\n    " + seq.join("\n    "));
+}
+
+// 9 splitRange (manual ?days=N path): 30 days back from 2026-10-22 is 31 civil days.
+{
+  const chunks = splitRange("2026-09-22", "2026-10-22");
+  assert.deepEqual(chunks.map(fmt), ["2026-09-22..2026-10-05(14)", "2026-10-06..2026-10-19(14)", "2026-10-20..2026-10-22(3)"]);
+  assert.deepEqual(splitRange("2026-10-22", "2026-10-22").map(fmt), ["2026-10-22..2026-10-22(1)"]);
+  assert.deepEqual(splitRange("2026-10-23", "2026-10-22"), []);
+  assert.equal(splitRange("2026-10-01", "2026-10-03", 0).length, 3, "non-positive size still terminates");
+  console.log("9 splitRange: " + chunks.map(fmt).join(" | "));
 }
 
 console.log(`ALL CHECKS PASSED (TZ=${process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone})`);
