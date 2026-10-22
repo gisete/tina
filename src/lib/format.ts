@@ -30,3 +30,25 @@ export function formatDurationMs(ms: number): string {
 export function formatDateMMDD(dateStr: string): string {
   return `${dateStr.slice(5, 7)}/${dateStr.slice(8, 10)}`;
 }
+
+/**
+ * "YYYY-MM-DD" → "June 18, 2026"
+ * String-sliced, no Date construction, no UTC shift.
+ */
+export function formatDateLong(dateStr: string): string {
+  const MONTHS = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December",
+  ];
+  const month = parseInt(dateStr.slice(5, 7), 10) - 1;
+  const day   = parseInt(dateStr.slice(8, 10), 10);
+  const year  = dateStr.slice(0, 4);
+  return `${MONTHS[month]} ${day}, ${year}`;
+}
+
+/**
+ * 0–1 fraction → "89%" (efficiency stored as decimal in the DB).
+ */
+export function formatEfficiencyPct(fraction: number): string {
+  return `${Math.round(fraction * 100)}%`;
+}

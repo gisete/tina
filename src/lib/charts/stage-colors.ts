@@ -5,8 +5,8 @@
 import type { SleepStageType } from "@/lib/analytics/sleep/types";
 
 export const STAGE_COLORS: Record<SleepStageType, string> = {
-  deep:  "#1e1b4b", // indigo-950  — deep midnight navy
-  light: "#6366f1", // indigo-500  — periwinkle
+  deep:  "#4338ca", // indigo-700
+  light: "#0891b2", // cyan-600
   rem:   "#8b5cf6", // violet-500  — lavender purple
   awake: "#d97706", // amber-600   — soft amber gold
 };

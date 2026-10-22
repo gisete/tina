@@ -2,7 +2,7 @@
 // Takes userId as a plain parameter — callers handle auth before invoking.
 
 import { db } from "@/db/client";
-import { heartRateSummaries, dailyActivitySummaries } from "@/db/schema";
+import { heartRateSummaries, dailyActivitySummaries, dailyFeelingTags } from "@/db/schema";
 import { eq, and, gte, lte, asc } from "drizzle-orm";
 import type { DailyHrSummary } from "@/lib/analytics/hr-trends";
 import type { DailyActivityRow } from "@/lib/analytics/activity";
@@ -61,4 +61,21 @@ export async function readActivitySummaries(
     vigorousMinutes: r.vigorousMinutes,
     peakMinutes:     r.peakMinutes,
   }));
+}
+
+/**
+ * Returns the stored tag ids for the given night (the sleep-date "YYYY-MM-DD"
+ * string as stored in daily_feeling_tags.night_of). Empty array if none set.
+ */
+export async function readNightFeeling(
+  userId: string,
+  nightOf: string,
+): Promise<number[]> {
+  const rows = await db.query.dailyFeelingTags.findMany({
+    where: and(
+      eq(dailyFeelingTags.userId, userId),
+      eq(dailyFeelingTags.nightOf, nightOf),
+    ),
+  });
+  return rows.map((r) => r.tagId);
 }

@@ -70,6 +70,20 @@ export const heartRateSamples = pgTable(
   ]
 );
 
+export const dailyFeelingTags = pgTable(
+  "daily_feeling_tags",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    nightOf: date("night_of").notNull(),
+    tagId: integer("tag_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("daily_feeling_tags_user_id_night_of_tag_id_idx").on(t.userId, t.nightOf, t.tagId),
+  ]
+);
+
 export const dailyActivitySummaries = pgTable(
   "daily_activity_summaries",
   {
@@ -95,6 +109,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   heartRateSummaries: many(heartRateSummaries),
   heartRateSamples: many(heartRateSamples),
   dailyActivitySummaries: many(dailyActivitySummaries),
+  dailyFeelingTags: many(dailyFeelingTags),
 }));
 
 export const heartRateSamplesRelations = relations(heartRateSamples, ({ one }) => ({
@@ -190,6 +205,10 @@ export const heartRateSummariesRelations = relations(heartRateSummaries, ({ one 
 
 export const dailyActivitySummariesRelations = relations(dailyActivitySummaries, ({ one }) => ({
   user: one(users, { fields: [dailyActivitySummaries.userId], references: [users.id] }),
+}));
+
+export const dailyFeelingTagsRelations = relations(dailyFeelingTags, ({ one }) => ({
+  user: one(users, { fields: [dailyFeelingTags.userId], references: [users.id] }),
 }));
 
 // ── Today: plan templates ────────────────────────────────────────────────────

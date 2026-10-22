@@ -37,8 +37,8 @@ interface HypnogramChartProps {
 
 import { STAGE_COLORS } from "@/lib/charts/stage-colors";
 
-/** Deep blocks at/above the 30m anchor threshold get a contrasting highlight. */
-const CONSOLIDATED_DEEP_COLOR = "#0d9488"; // teal-600
+/** Deep blocks at/above the 30m anchor threshold get a darker indigo highlight. */
+const CONSOLIDATED_DEEP_COLOR = "#1e1b4b"; // indigo-950
 const CONSOLIDATED_DEEP_MIN_MS = 30 * 60000;
 
 /** Brief mid-night stirs are flagged with a rose diamond on the Awake lane. */

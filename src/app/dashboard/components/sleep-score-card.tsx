@@ -14,6 +14,8 @@ const LABELS: Record<SleepScoreComponentKey, { label: string; description: strin
 interface Props {
   score: number;
   breakdown: SleepScoreBreakdown | null | undefined;
+  /** De-emphasises the score number so it doesn't compete with the hero above. */
+  compact?: boolean;
 }
 
 // Shared pill — same markup in both the no-breakdown and breakdown paths.
@@ -23,7 +25,7 @@ const TARGET_PILL = (
   </span>
 );
 
-export default function SleepScoreCard({ score, breakdown }: Props) {
+export default function SleepScoreCard({ score, breakdown, compact = false }: Props) {
   // No breakdown: static card with no expand toggle (preserves current behaviour
   // when last-night data is unavailable).
   if (!breakdown) {
@@ -35,15 +37,22 @@ export default function SleepScoreCard({ score, breakdown }: Props) {
           </h2>
           {TARGET_PILL}
         </div>
-        <div className="font-display text-4xl font-bold text-black tracking-tight">{score}</div>
-        <div className="text-sm text-on-surface-variant mt-1">
-          Weighted composite of volume, efficiency, continuity, disruption, and cardiac recovery
-        </div>
+        <div className={`font-display font-bold text-black tracking-tight ${compact ? "text-2xl" : "text-4xl"}`}>{score}</div>
+        {!compact && (
+          <div className="text-sm text-on-surface-variant mt-1">
+            Weighted composite of volume, efficiency, continuity, disruption, and cardiac recovery
+          </div>
+        )}
       </div>
     );
   }
 
-  const overview = (
+  const overview = compact ? (
+    <div className="flex items-baseline gap-2">
+      <span className="font-display text-2xl font-bold text-black tracking-tight">{score}</span>
+      <span className="text-xs text-on-surface-variant">/ 100</span>
+    </div>
+  ) : (
     <>
       <div className="font-display text-4xl font-bold text-black tracking-tight">{score}</div>
       <div className="text-sm text-on-surface-variant mt-1">
