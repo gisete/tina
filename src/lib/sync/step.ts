@@ -1,10 +1,12 @@
 // One unit of catch-up work per call: lock → pick unit → sync range → advance
-// cursor → release lock. Orchestration only; planning is pure (catch-up.ts).
+// cursor → (recent only: best-effort last-night HR samples) → release lock.
+// Orchestration only; planning is pure (catch-up.ts).
 
 import { localToday } from "@/lib/dates";
 import { GoogleAuthError } from "@/lib/google/errors";
 import { isSyncStale, TODAY_STALE_AFTER_HOURS } from "@/lib/today";
 import { advanceCursor, gapProgress, pickNextUnit, planCatchUp } from "@/lib/sync/catch-up";
+import { ensureLatestNightSamples } from "@/lib/sync/night-samples";
 import { syncDateRange } from "@/lib/sync/range";
 import {
   acquireSyncLock,
@@ -44,6 +46,14 @@ export async function runSyncStep(userId: string, opts: SyncStepRequest = {}): P
     // Cursor moves only after the whole unit succeeded, and only contiguously.
     const next = advanceCursor(state.syncedThrough, unit.range.from, unit.range.to);
     if (next !== null && next !== state.syncedThrough) await writeSyncedThrough(userId, next);
+
+    // Recent window only: last night's HR samples feed Today's score. Best-effort —
+    // the unit already succeeded, and the sleep page's lazy fetch is the fallback.
+    if (unit.kind === "recent") {
+      await ensureLatestNightSamples(userId).catch((e: unknown) =>
+        console.warn("[sync-step] night HR samples failed (continuing):", e instanceof Error ? e.message : e),
+      );
+    }
 
     const { daysDone, daysTotal } = gapProgress(
       opts.previousTotal ?? 0,

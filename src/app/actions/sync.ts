@@ -2,23 +2,22 @@
 
 import { auth } from "@/auth";
 import { db } from "@/db/client";
-import { sleepSessions, heartRateSummaries, heartRateSamples, syncState } from "@/db/schema";
+import { sleepSessions, heartRateSummaries, syncState } from "@/db/schema";
 import {
   fetchGoogleSleepData,
   fetchGoogleHeartData,
-  fetchGoogleHeartRateSamples,
   fetchGoogleZoneRecords,
   fetchGoogleDailySteps,
 } from "@/lib/google/client";
 import {
   normalizeGoogleSleepSessions,
   normalizeHeartData,
-  normalizeHeartRateSamples,
   normalizeZoneRecords,
   normalizeDailySteps,
 } from "@/lib/google/normalizers";
 import { runSyncStep } from "@/lib/sync/step";
-import { persistHealthRecords, persistHeartRateSamples, persistActivitySummaries, persistDailySteps } from "@/lib/sync/persist";
+import { ensureNightSamples, ensureLatestNightSamples } from "@/lib/sync/night-samples";
+import { persistHealthRecords, persistActivitySummaries, persistDailySteps } from "@/lib/sync/persist";
 import { aggregateZoneMinutes } from "@/lib/analytics/activity";
 import { assembleDashboardData } from "@/lib/sync/assemble";
 import { selectMainSessions, buildDebtHistory, calculateSleepDebt } from "@/lib/analytics/sleep";
@@ -39,74 +38,8 @@ const RECONCILE_WINDOW_DAYS = 3;
  */
 const STALE_AFTER_HOURS = 6;
 
-/**
- * Minimum cached samples before a night is considered fully populated.
- * Below this, we attempt a Google fetch on first read.
- */
-const MIN_NIGHT_SAMPLES = 10;
-
 // ─────────────────────────────────────────────────────────────────────────────
-// SHARED SAMPLE HELPER
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Ensures the heart_rate_samples cache is populated for the given session.
- * Returns cached samples immediately when the cache is warm (≥ MIN_NIGHT_SAMPLES).
- * On a cold cache, fetches from Google once, persists permanently, and returns
- * the fresh samples.
- *
- * This is a deliberate, narrow exception to the read/sync split: it fires at
- * most once per night ever (permanently cached after first view), only for the
- * single session being displayed, and only when samples are genuinely absent.
- * Don't remove this Google call in the name of "reads don't hit Google" —
- * that rule is about avoiding full syncs on every navigation, not about
- * blocking lazy one-off population of permanent cache entries.
- *
- * Sample queries key on session start_time/end_time (timestamps), not
- * sleep_date, so results are unaffected by any historical sleep_date mis-keying
- * from before the nightOf() fix.
- */
-async function ensureNightSamples(
-  userId: string,
-  session: { startTime: Date; endTime: Date },
-): Promise<Array<{ timestamp: Date; bpm: number }>> {
-  const sampleQuery = () =>
-    db.query.heartRateSamples.findMany({
-      where: and(
-        eq(heartRateSamples.userId, userId),
-        gte(heartRateSamples.timestamp, session.startTime),
-        lte(heartRateSamples.timestamp, session.endTime),
-      ),
-      orderBy: [asc(heartRateSamples.timestamp)],
-    });
-
-  const cached = await sampleQuery();
-  if (cached.length >= MIN_NIGHT_SAMPLES) return cached;
-
-  try {
-    const raw = await fetchGoogleHeartRateSamples(
-      userId,
-      session.startTime.toISOString(),
-      session.endTime.toISOString(),
-    );
-    const normalized = normalizeHeartRateSamples(userId, raw);
-    if (normalized.length > 0) {
-      await persistHeartRateSamples(normalized);
-      console.log(`[sync] Fetched ${normalized.length} heart-rate samples for ${session.startTime.toISOString()}`);
-      return sampleQuery();
-    }
-  } catch (err) {
-    console.warn(
-      "[sync] HR samples fetch failed (continuing):",
-      err instanceof Error ? err.message : err,
-    );
-  }
-
-  return cached;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// READ PATH — no Google calls except ensureNightSamples (see above)
+// READ PATH — no Google calls except ensureNightSamples (see src/lib/sync/night-samples.ts)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -292,15 +225,7 @@ async function runGoogleSync({ days = RECONCILE_WINDOW_DAYS }: { days?: number }
   }
 
   // Populate the HR sample cache for the most-recent main session if sparse.
-  const recentSessions = await db.query.sleepSessions.findMany({
-    where: eq(sleepSessions.userId, userId),
-    orderBy: [desc(sleepSessions.sleepDate)],
-    limit: 5,
-  });
-  const mainSession = selectMainSessions(recentSessions)[0];
-  if (mainSession) {
-    await ensureNightSamples(userId, mainSession);
-  }
+  await ensureLatestNightSamples(userId);
 
   // Stamp the sync clock so the staleness guard knows when we last ran.
   await db
