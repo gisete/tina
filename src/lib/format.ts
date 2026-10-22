@@ -1,5 +1,7 @@
 // User-facing display formatters shared across pages and chart components.
 
+import { addDays, parseLocalDate } from "@/lib/dates";
+
 /** "11:35 PM" — accepts a Unix-ms timestamp, ISO string, or Date. */
 export function formatClockTime(t: number | string | Date): string {
   return new Date(t).toLocaleTimeString("en-US", {
@@ -46,9 +48,41 @@ export function formatDateLong(dateStr: string): string {
   return `${MONTHS[month]} ${day}, ${year}`;
 }
 
+/** Sleep efficiency as a percent (0-100) → "94%"; absent value → "—" (a real 0 stays "0%"). */
+export function formatEfficiency(percent: number | null | undefined): string {
+  return percent === null || percent === undefined || Number.isNaN(percent) ? "—" : `${Math.round(percent)}%`;
+}
+
+/**
+ * "YYYY-MM-DD" (the night's start date) → "Night of Tue, Oct 20 → Wed, Oct 21".
+ * Weekday comes from local-date construction (parseLocalDate), never a UTC parse.
+ */
+export function formatNightRange(nightOf: string): string {
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const label = (dateStr: string): string => {
+    const d = parseLocalDate(dateStr);
+    return `${WEEKDAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  };
+  return `Night of ${label(nightOf)} → ${label(addDays(nightOf, 1))}`;
+}
+
 /**
  * 0–1 fraction → "89%" (efficiency stored as decimal in the DB).
  */
 export function formatEfficiencyPct(fraction: number): string {
   return `${Math.round(fraction * 100)}%`;
+}
+
+/** "YYYY-MM-DD" → "Thursday 22 October". Built on parseLocalDate, so no UTC shift. */
+export function formatWeekdayMonthDay(dateStr: string): string {
+  const d = parseLocalDate(dateStr);
+  const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
+  const month = d.toLocaleDateString("en-US", { month: "long" });
+  return `${weekday} ${d.getDate()} ${month}`;
+}
+
+/** 431 → { hours: 7, minutes: 11 } */
+export function splitDurationMins(mins: number): { hours: number; minutes: number } {
+  return { hours: Math.floor(mins / 60), minutes: mins % 60 };
 }

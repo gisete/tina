@@ -108,12 +108,12 @@ export default function NightFeelingInput({ nightOf, initialTagIds, isCurrentNig
   // ── CTA ──────────────────────────────────────────────────────────────────────
   return (
     <div className="animate-in fade-in duration-150">
-      <p className="text-sm text-on-surface-variant mb-4">
+      <p className="text-xl text-on-surface mb-4">
         Log how you felt waking up from this night.
       </p>
       <button
         onClick={startEdit}
-        className="px-4 py-2 rounded-xl bg-on-surface text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+        className="min-h-11 px-6 rounded-full bg-on-surface text-white text-[15px] font-medium hover:opacity-90 transition-opacity"
       >
         Record how you feel
       </button>

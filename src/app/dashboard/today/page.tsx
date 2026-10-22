@@ -12,6 +12,8 @@ import DayPanel from "./components/day-panel";
 import { Mantras, Strategies } from "./components/mindset-blocks";
 import StepsCard from "./components/steps-card";
 import SleepCard from "./components/sleep-card";
+import NightHeartCard from "./components/night-heart-card";
+import { formatWeekdayMonthDay } from "@/lib/format";
 
 export default async function TodayPage() {
   // The layout redirects unauthenticated users, but pages render in parallel
@@ -54,22 +56,30 @@ export default async function TodayPage() {
   const motivation = pickMotivationLine(today, plan.motivation);
 
   return (
-    <div className="p-margin-mobile md:p-margin-desktop max-w-3xl mx-auto space-y-6 py-10 pb-24">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <h1 className="font-display text-4xl font-bold text-on-surface tracking-tight">Today</h1>
-      </div>
-
-      {motivation && (
-        <p className="font-display text-lg font-semibold text-on-surface tracking-tight">{motivation.text}</p>
-      )}
-
-      <DayPanel days={days} conditions={conditions} nudge={nudge} />
+    <div className="p-margin-mobile md:p-margin-desktop max-w-5xl mx-auto space-y-7 py-10 pb-24">
+      <DayPanel
+        days={days}
+        conditions={conditions}
+        nudge={nudge}
+        heading={
+          <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1.5">
+            <h1 className="font-display text-[44px] font-normal leading-none text-on-surface tracking-[-0.025em]">Today</h1>
+            <p className="text-lg text-on-surface-variant">{formatWeekdayMonthDay(today)}</p>
+          </div>
+        }
+        intro={
+          motivation && (
+            <p className="font-display text-lg font-semibold text-on-surface tracking-tight">{motivation.text}</p>
+          )
+        }
+      >
+        <SleepCard night={lastNight} className="md:col-span-4 md:row-span-2" />
+        <NightHeartCard night={lastNight} className="md:col-span-2" />
+        <StepsCard steps={steps} className="md:col-span-2" />
+      </DayPanel>
 
       <Mantras items={plan.mindset.filter((m) => m.kind === "mantra")} />
       <Strategies items={plan.mindset.filter((m) => m.kind === "strategy")} />
-
-      <StepsCard steps={steps} />
-      <SleepCard night={lastNight} />
     </div>
   );
 }

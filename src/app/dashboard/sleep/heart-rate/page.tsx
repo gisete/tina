@@ -5,11 +5,12 @@ import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import { readHrSummaries } from "@/lib/sync/read";
 import NightHeartChart from "../../components/night-heart-chart";
+import MissingNightCard from "../../components/missing-night-card";
 import DateNavigator from "../../components/date-navigator";
 import HrTrendChart from "./hr-trend-chart";
 import RecoveryBalanceChart from "./recovery-balance-chart";
 import { localToday, addDays } from "@/lib/dates";
-import { formatClockTime } from "@/lib/format";
+import { formatClockTime, formatNightRange } from "@/lib/format";
 import { WINDOW_DAYS } from "@/lib/analytics/hr-trends";
 import { calculateStageHr } from "@/lib/analytics/sleep";
 
@@ -32,6 +33,15 @@ export default async function HeartRateDetailPage({
   } catch (error) {
     console.error("Heart rate detail page error:", error);
   }
+
+  // The picked date implies one night. When it has no session, data.lastNight is
+  // an older night: never show it here, only offer a link to it.
+  const selected = data?.hasData === true ? data.selectedNight : null;
+  const missingNight = selected?.status === "missing" ? selected : null;
+  if (data?.hasData === true && missingNight) {
+    data = { ...data, lastNight: null, nightHeart: null, nightHrSeries: [] };
+  }
+  const nightLabel = selected?.status === "recorded" ? formatNightRange(selected.nightOf) : null;
 
   // Per-stage HR averages — derived from the same data loaded above, no new fetch.
   const stageHr =
@@ -86,12 +96,15 @@ export default async function HeartRateDetailPage({
               <p className="text-base text-on-surface-variant max-w-xl">
                 {data.lastNight ? (
                   <>
+                    {nightLabel && <>{nightLabel}<span className="mx-2 text-outline-variant">·</span></>}
                     {formatClockTime(data.lastNight.startTime)}
                     <span className="mx-2 text-outline-variant">–</span>
                     {formatClockTime(data.lastNight.endTime)}
                   </>
                 ) : (
-                  "Beats per minute across the night. Dips below the dashed line mark restorative stretches."
+                  missingNight
+                    ? formatNightRange(missingNight.expectedNightOf)
+                    : "Beats per minute across the night. Dips below the dashed line mark restorative stretches."
                 )}
               </p>
             </div>
@@ -101,7 +114,22 @@ export default async function HeartRateDetailPage({
           </div>
 
           {/* Chart or empty state */}
-          {data.lastNight && data.nightHrSeries.length > 1 ? (
+          {missingNight ? (
+            <div className="space-y-3">
+              <MissingNightCard
+                expectedNightOf={missingNight.expectedNightOf}
+                isToday={targetDate === today}
+              />
+              {missingNight.fallbackNightOf && (
+                <Link
+                  href={`/dashboard/sleep/heart-rate?date=${addDays(missingNight.fallbackNightOf, 1)}`}
+                  className="inline-block text-sm font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+                >
+                  View most recent recorded night →
+                </Link>
+              )}
+            </div>
+          ) : data.lastNight && data.nightHrSeries.length > 1 ? (
             <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
               <div className="mb-6">
                 <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">Heart Rate Curve</h2>

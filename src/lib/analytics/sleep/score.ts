@@ -29,6 +29,9 @@ const W_CARDIAC    = 0.15;
  */
 const EXCELLENT_EFFICIENCY = 0.95;
 
+/** Sleep score the UI labels as the goal ("Target >85"). */
+export const SLEEP_SCORE_TARGET = 85;
+
 /**
  * Raw sleep efficiency: the fraction of time in bed actually spent asleep.
  * Returns a value in [0, 1]; clamped so anomalous data never exceeds 1.
@@ -45,6 +48,11 @@ const EXCELLENT_EFFICIENCY = 0.95;
 export function rawSleepEfficiency(totalSleepMs: number, timeInBedMs: number): number {
   if (timeInBedMs <= 0) return 0;
   return Math.min(totalSleepMs / timeInBedMs, 1);
+}
+
+/** {@link rawSleepEfficiency} for display: null (not 0) when there is no time in bed to measure. */
+export function liveSleepEfficiency(totalSleepMs: number, timeInBedMs: number): number | null {
+  return timeInBedMs > 0 ? rawSleepEfficiency(totalSleepMs, timeInBedMs) : null;
 }
 
 // ---------------------------------------------------------------------------

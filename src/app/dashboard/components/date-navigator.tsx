@@ -16,30 +16,29 @@ export default function DateNavigator() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
+  const BTN =
+    "flex h-11 w-11 items-center justify-center rounded-full text-lg text-on-surface hover:bg-surface-container transition-colors disabled:text-on-surface-variant disabled:opacity-40 disabled:hover:bg-transparent";
+
   return (
-    <div className="flex items-center justify-between border rounded-full px-3 py-1.5 w-fit shadow-sm bg-white border-zinc-200">
-      <button
-        onClick={() => mergeDate(addDays(activeDate, -1))}
-        className="p-1 text-zinc-600 hover:bg-zinc-100 rounded-full transition-colors flex items-center justify-center text-sm font-bold"
-        aria-label="Previous day"
-      >
+    <div className="inline-flex w-fit items-center gap-1 rounded-full border border-hairline bg-white p-1">
+      <button onClick={() => mergeDate(addDays(activeDate, -1))} className={BTN} aria-label="Previous day">
         &larr;
       </button>
 
-      <div className="px-4 flex items-center cursor-pointer">
+      <div className="flex items-center px-2.5">
         <input
           type="date"
           value={activeDate}
           max={localToday()}
           onChange={(e) => mergeDate(e.target.value)}
-          className="bg-transparent border-none outline-none text-center cursor-pointer text-sm font-semibold text-zinc-900 tracking-tight [color-scheme:light]"
+          className="cursor-pointer border-none bg-transparent text-center text-[15px] font-medium text-on-surface outline-none [color-scheme:light]"
         />
       </div>
 
       <button
         onClick={() => mergeDate(addDays(activeDate, 1))}
         disabled={activeDate === localToday()}
-        className="p-1 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-transparent rounded-full transition-colors flex items-center justify-center text-sm font-bold"
+        className={BTN}
         aria-label="Next day"
       >
         &rarr;

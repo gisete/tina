@@ -41,8 +41,8 @@ import { STAGE_COLORS } from "@/lib/charts/stage-colors";
 const CONSOLIDATED_DEEP_COLOR = "#1e1b4b"; // indigo-950
 const CONSOLIDATED_DEEP_MIN_MS = 30 * 60000;
 
-/** Brief mid-night stirs are flagged with a rose diamond on the Awake lane. */
-const RESTLESS_COLOR = "#f43f5e"; // rose-500
+/** Brief mid-night stirs are flagged with an amber diamond on the Awake lane (classes: fill-restless-marker / fill-restless-label). */
+const RESTLESS_TOOLTIP_COLOR = "var(--color-restless-marker)";
 const RESTLESS_D = 11; // diamond bounding size, px
 
 // Vertical geometry (px). Each lane row = label line + segment track.
@@ -123,7 +123,7 @@ export default function HypnogramChart({
       x: e.clientX - rect.left,
       y: laneCenter(LANE_INDEX.awake) - SEG_H / 2,
       title: restlessnessSource === "hr-estimated" ? "Restless (est.)" : "Restless",
-      titleColor: RESTLESS_COLOR,
+      titleColor: RESTLESS_TOOLTIP_COLOR,
       rangeLabel: formatClockTime(m.startTimestamp),
       durationLabel: formatDurationMs(m.durationMs),
     });
@@ -180,7 +180,7 @@ export default function HypnogramChart({
                   {" · "}{formatDurationMs(layout.stageTotalsMs[stage])}
                 </tspan>
                 {stage === "awake" && layout.restlessMarkers.length > 0 && (
-                  <tspan fill={RESTLESS_COLOR} fontWeight={600}>
+                  <tspan className="fill-restless-label" fontWeight={600}>
                     {" · "}{restlessnessSource === "hr-estimated" ? "~" : ""}{layout.restlessMarkers.length} restless
                   </tspan>
                 )}
@@ -254,7 +254,7 @@ export default function HypnogramChart({
             );
           })}
 
-          {/* Restless markers — brief (<5m) mid-night stirs, as rose diamonds
+          {/* Restless markers — brief (<5m) mid-night stirs, as amber diamonds
               centered on the Awake lane. The wrapping g shifts left by half the
               diamond so the x-percentage lands on its center; the rect rotates
               45° around its own box center (transform-box: fill-box). */}
@@ -271,7 +271,7 @@ export default function HypnogramChart({
                 y={laneCenter(LANE_INDEX.awake) - RESTLESS_D / 2}
                 width={RESTLESS_D}
                 height={RESTLESS_D}
-                fill={RESTLESS_COLOR}
+                className="fill-restless-marker"
                 stroke="#ffffff"
                 strokeWidth={1.5}
                 style={{ transformBox: "fill-box", transformOrigin: "center", transform: "rotate(45deg)" }}

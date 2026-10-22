@@ -34,6 +34,10 @@ Follow these when writing new code. They reflect how the codebase is organized t
 ## UI
 
 - Tailwind v4: design tokens are CSS variables in the `@theme` block of `src/app/globals.css` (surface/outline color roles, `--font-display` Epilogue, `--font-sans` Plus Jakarta Sans). Use the token classes (`text-on-surface-variant`, `border-outline-variant`, …) rather than raw palette values for themed surfaces.
+- **Tint = domain, never value.** Stat-card tints (sleep, heart, activity, nutrition) say what a card measures, not whether the number is good or bad — no status/good-bad coloring.
+- Tint is for display stat cards only. Cards the user acts on (workout, meals with data) stay on the neutral surface; empty states are dashed outlines with no fill.
+- Red is reserved for warnings and errors. Pills on tinted cards are white; the lime accent belongs to neutral surfaces.
+- Tone styling uses a `Record<Tone, {...}>` of complete literal class strings (see `stat-card.tsx`). Never build Tailwind class names dynamically — v4 only sees full strings.
 - Enter/expand animations use `tw-animate-css` classes (`animate-in fade-in …`), already imported in `globals.css`.
 
 ## Verification

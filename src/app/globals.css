@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Epilogue:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -24,6 +24,35 @@
   --color-background: #f9f9f8;
   --color-secondary: #5e5e5e;
   --color-outline: #5e5e5e;
+
+  /* Domain tints for display stat cards: tint = domain, never value. */
+  --color-sleep-surface: #dcddf4;
+  --color-sleep-ink: #25235a;
+  --color-sleep-muted: #4f4d8a;
+  --color-sleep-surface-strong: #cfd1f0;
+  --color-sleep-surface-soft: #e6e7f7;
+  --color-hairline: #ece9e2;
+  --color-heart-surface: #d0e8ee;
+  --color-heart-ink: #0f3a47;
+  --color-heart-muted: #3a6877;
+  --color-activity-surface: #d5e6cf;
+  --color-activity-ink: #1f3d22;
+  --color-activity-muted: #46694a;
+  --color-nutrition-surface: #f5e6c8;
+  --color-nutrition-ink: #4d3410;
+  --color-nutrition-muted: #7a5a22;
+
+  /* Sleep-stage tints for the stage bar on the sleep (lavender) surface */
+  --color-stage-deep: #2a2870;
+  --color-stage-light: #a8a3ea;
+  --color-stage-rem: #6a5fd6;
+  --color-stage-awake: #f0b77a;
+
+  /* Restless-event markers on the hypnogram: amber, distinct from the orange awake bars */
+  --color-restless-marker: #a9500b;
+  --color-restless-label: #8a4a0c;
+
+  --radius-card: 28px;
 
   /* Spacing Scale Extensions */
   --spacing-sidebar-width: 260px;

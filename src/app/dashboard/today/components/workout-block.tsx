@@ -5,6 +5,7 @@ import { logBackupWorkout, resetWorkout, skipWorkout, toggleWorkoutItem } from "
 import type { ConditionWithOptions, TodayPlan } from "@/lib/today/types";
 import type { SleepNudge } from "@/lib/today/sleep-nudge";
 import { ErrorLine, useRun } from "../../plan/components/plan-ui";
+import { EmptyStateCard } from "../../components/stat-card";
 
 export function CheckRow({
   checked,
@@ -40,19 +41,21 @@ export function CheckRow({
 }
 
 const SECONDARY_BTN =
-  "rounded-xl border border-outline-variant px-4 py-2 text-sm font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors disabled:opacity-50";
+  "rounded-full border border-outline-variant min-h-11 px-[22px] text-sm font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors disabled:opacity-50";
 
 export default function WorkoutBlock({
   plan,
   conditions,
   nudge,
   title,
+  className = "",
 }: {
   plan: TodayPlan;
   conditions: ConditionWithOptions[];
   /** Today-only sleep suggestion; highlights chips but never selects one. */
   nudge: SleepNudge | null;
   title: string;
+  className?: string;
 }) {
   const { date, exercise } = plan;
   const { log, items } = exercise;
@@ -72,17 +75,19 @@ export default function WorkoutBlock({
     setPicked([]);
   }
 
-  return (
-    <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">{title}</h2>
-        <span className="px-2 py-0.5 bg-primary-container text-black font-semibold text-xs rounded-full">{statusLabel}</span>
-      </div>
+  const pill = <span className="px-2 py-0.5 bg-primary-container text-black font-semibold text-xs rounded-full">{statusLabel}</span>;
+  // Nothing planned (and not skipped): quiet dashed shell; same content inside.
+  const empty = log.kind !== "skipped" && items.length === 0;
 
+  const body = (
+    <>
       {log.kind === "skipped" ? (
         <p className="text-sm text-on-surface-variant py-2">You skipped this day&apos;s workout.</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-on-surface-variant py-2">Nothing planned for this day. Add workouts on the Plan page.</p>
+        <div className="py-2">
+          <p className={empty ? "text-xl text-on-surface" : "text-sm text-on-surface-variant"}>Nothing planned for this day.</p>
+          <p className={`${empty ? "mt-1.5" : "mt-0.5"} text-sm text-on-surface-variant`}>Add workouts on the Plan page.</p>
+        </div>
       ) : (
         <div className="divide-y divide-outline-variant/50">
           {items.map((item, idx) => (
@@ -163,6 +168,24 @@ export default function WorkoutBlock({
           )}
         </div>
       )}
+    </>
+  );
+
+  if (empty) {
+    return (
+      <EmptyStateCard eyebrow={title} topRight={pill} className={className}>
+        {body}
+      </EmptyStateCard>
+    );
+  }
+
+  return (
+    <div className={`bg-white border border-outline-variant rounded-card p-7 ${className}`}>
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">{title}</h2>
+        {pill}
+      </div>
+      {body}
     </div>
   );
 }

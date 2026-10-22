@@ -1,6 +1,7 @@
 "use server";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import { readNightFeeling } from "@/lib/sync/read";
@@ -11,9 +12,26 @@ import SleepScoreCard from "../components/sleep-score-card";
 import DateNavigator from "../components/date-navigator";
 import ContinuityExplainer from "../components/continuity-explainer";
 import NightFeelingInput from "../components/night-feeling-input";
-import NightSummaryHero from "../components/night-summary-hero";
-import { localToday } from "@/lib/dates";
-import { formatClockTime } from "@/lib/format";
+import ArchitectureCard, { type ArchitectureRow } from "../components/architecture-card";
+import { EYEBROW, EmptyStateCard, NeutralCard, StatCard, StatDuration, StatPill, StatValue } from "../components/stat-card";
+import { FEELING_TAGS } from "@/lib/analytics/feeling-tags";
+import { SLEEP_SCORE_TARGET, summarizeNightTotals } from "@/lib/analytics/sleep";
+import MissingNightCard from "../components/missing-night-card";
+import { addDays, localToday } from "@/lib/dates";
+import { formatClockTime, formatDurationMins, formatNightRange, splitDurationMins } from "@/lib/format";
+
+function HowIFelt({ logged, className, children }: { logged: boolean; className: string; children: ReactNode }) {
+  return logged ? (
+    <NeutralCard className={`${className} !p-7`}>
+      <h2 className={`${EYEBROW} mb-4 text-on-surface-variant`}>How I felt</h2>
+      {children}
+    </NeutralCard>
+  ) : (
+    <EmptyStateCard eyebrow="How I felt" className={className}>
+      {children}
+    </EmptyStateCard>
+  );
+}
 
 export default async function SleepPage({
   searchParams,
@@ -34,15 +52,65 @@ export default async function SleepPage({
     console.error("Sleep page error:", error);
   }
 
+  // The night the picked date implies may not exist. Then data.lastNight is an
+  // older night: show it only as a labelled fallback (today), never for a past
+  // date, and never under the picked date as if it were that night.
+  const selected = data?.hasData === true ? data.selectedNight : null;
+  const missingNight = selected?.status === "missing" ? selected : null;
+  const fallbackNightOf = missingNight?.fallbackNightOf ?? null;
+  if (data?.hasData === true && missingNight && fallbackNightOf === null) {
+    data = { ...data, lastNight: null, nightHeart: null };
+  }
+
+  // "How I felt" and the heart-rate link follow the DISPLAYED night, not the picker date.
   const nightOf = data?.hasData === true && data.lastNight ? data.lastNight.sleepDate : null;
   const initialTagIds = nightOf ? await readNightFeeling(userId, nightOf) : [];
+
+  const night = data?.hasData === true ? data.lastNight : null;
+  const totals = night ? summarizeNightTotals(night.totalSleepMs, night.startTime, night.endTime) : null;
+  const asleep = splitDurationMins(totals?.asleepMins ?? 0);
+  const hasLoggedFeeling = initialTagIds.some((id) => FEELING_TAGS.some((t) => t.id === id));
+
+  const nightHeart = data?.hasData === true ? data.nightHeart : null;
+  const restingHr = nightHeart?.restingHr ?? null;
+  const heartStatus = nightHeart && nightHeart.status !== "insufficient" ? nightHeart.status : null;
+  const heartCaption = nightHeart
+    ? [nightHeart.hrv != null ? `${nightHeart.hrv} ms HRV` : null, nightHeart.baselineRhr != null ? `baseline ${nightHeart.baselineRhr} bpm` : null]
+        .filter((p): p is string => p !== null)
+        .join(" · ") || null
+    : null;
+  const heartLink = nightOf ? `/dashboard/sleep/heart-rate?date=${addDays(nightOf, 1)}` : null;
+
+  const arch = data?.hasData === true ? data.analytics?.architecture : null;
+  const architectureRows: ArchitectureRow[] = night
+    ? [
+        {
+          key: "deep", name: "Deep sleep", blurb: "Physical recovery & muscular restoration",
+          pct: arch?.deepPercentage || 0, targetLo: 15, targetHi: 20,
+          status: night.continuity?.status ?? null,
+          explainer: night.continuity ? <ContinuityExplainer stage="deep" data={night.continuity} /> : null,
+        },
+        {
+          key: "rem", name: "REM sleep", blurb: "Cognitive filing & mental clarity consolidation",
+          pct: arch?.remPercentage || 0, targetLo: 20, targetHi: 25,
+          status: null,
+          explainer: night.remContinuity ? <ContinuityExplainer stage="rem" data={night.remContinuity} /> : null,
+        },
+        {
+          key: "light", name: "Light sleep", blurb: "Transitionary bridge & basal processing",
+          pct: arch?.lightPercentage || 0, targetLo: 50, targetHi: 60,
+          status: night.lightStability?.status ?? null,
+          explainer: night.lightStability ? <ContinuityExplainer stage="light" data={night.lightStability} /> : null,
+        },
+      ]
+    : [];
 
   return (
     <div className="p-margin-mobile md:p-margin-desktop max-w-7xl mx-auto space-y-8 py-10 pb-24">
 
       {/* Page headline */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <h1 className="font-display text-4xl font-bold text-black tracking-tight">Sleep Intelligence</h1>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className="font-display text-[44px] font-normal leading-none text-on-surface tracking-[-0.025em]">Sleep Intelligence</h1>
         <div className="flex items-center gap-2.5">
           <SyncButton lastSyncedAt={data?.lastSyncedAt ?? null} />
         </div>
@@ -61,187 +129,138 @@ export default async function SleepPage({
           {/* ════ SELECTED NIGHT ════════════════════════════════════════════ */}
           <div className="space-y-5">
 
-            {/* Date navigator row */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">Selected night</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className={`${EYEBROW} text-on-surface-variant`}>Selected night</p>
+                <p className="mt-1.5 text-base text-secondary">
+                  {formatNightRange(missingNight ? missingNight.expectedNightOf : (nightOf ?? targetDate))}
+                  {!missingNight && night && <> · {formatClockTime(night.startTime)} – {formatClockTime(night.endTime)}</>}
+                </p>
+              </div>
               <DateNavigator />
             </div>
 
-            {/* ① Night summary hero — no card chrome */}
-            {data.lastNight && (
-              <NightSummaryHero
-                totalSleepMs={data.lastNight.totalSleepMs}
-                holisticScore={data.lastNight.holisticScore}
-                efficiencyScore={data.lastNight.efficiencyScore}
-                sleepDate={data.lastNight.sleepDate}
-                startTime={data.lastNight.startTime}
-                endTime={data.lastNight.endTime}
+            {missingNight && (
+              <MissingNightCard
+                expectedNightOf={missingNight.expectedNightOf}
+                isToday={targetDate === localToday()}
               />
             )}
 
-            {/* ② How I felt */}
-            {data.lastNight && nightOf && (
-              <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
-                <h2 className="font-display text-xl font-bold text-on-surface tracking-tight mb-4">How I felt</h2>
-                <NightFeelingInput
-                  key={nightOf}
-                  nightOf={nightOf}
-                  initialTagIds={initialTagIds}
-                  isCurrentNight={targetDate === localToday()}
-                />
+            {fallbackNightOf && night && (
+              <div className="pt-2">
+                <p className={`${EYEBROW} text-on-surface-variant`}>Most recent recorded night</p>
+                <p className="mt-1.5 text-base text-secondary">
+                  {formatNightRange(fallbackNightOf)} · {formatClockTime(night.startTime)} – {formatClockTime(night.endTime)}
+                </p>
               </div>
             )}
 
-            {/* ③ Sleep Timeline */}
-            {data.lastNight && (
-              <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
-                <div className="mb-6">
-                  <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">Sleep Timeline</h2>
-                  <p className="font-sans text-sm text-on-surface-variant mt-1">
-                    {formatClockTime(data.lastNight.startTime)}
-                    <span className="mx-2 text-outline-variant">–</span>
-                    {formatClockTime(data.lastNight.endTime)}
-                  </p>
-                </div>
-                <HypnogramChart
-                  timeline={data.lastNight.timeline}
-                  sessionStart={data.lastNight.startTime}
-                  sessionEnd={data.lastNight.endTime}
-                  restlessEvents={data.lastNight.restlessness.restlessEvents}
-                  restlessnessSource={data.lastNight.restlessness.source}
-                  bare
-                />
-              </div>
-            )}
+            {night && totals && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
 
-            {/* ④ Night Heart Rate */}
-            <Link
-              href={`/dashboard/sleep/heart-rate?date=${targetDate}`}
-              className="group bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] hover:border-outline transition-all"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-sm font-medium text-on-surface-variant">Night Heart Rate</span>
-                <span className={`px-2 py-0.5 font-semibold text-xs rounded-full ${
-                  data.nightHeart?.status === "recovering" ? "bg-emerald-100 text-emerald-800" :
-                  data.nightHeart?.status === "strained"   ? "bg-amber-100 text-amber-800" :
-                  "bg-surface-container text-on-surface-variant"
-                }`}>
-                  {data.nightHeart?.status === "insufficient" || !data.nightHeart ? "No data" : data.nightHeart.status}
-                </span>
-              </div>
-              <div>
-                <div className="font-display text-4xl font-bold text-heart-accent tracking-tight">
-                  {data.nightHeart?.restingHr != null
-                    ? <>{data.nightHeart.restingHr}<span className="text-xl text-on-surface-variant font-normal ml-0.5">bpm</span></>
-                    : <span className="text-on-surface-variant">—</span>}
-                </div>
-                <div className="text-sm text-on-surface-variant mt-1">
-                  {data.nightHeart?.hrv != null
-                    ? `${data.nightHeart.hrv} ms HRV${data.nightHeart.baselineRhr != null ? ` · baseline ${data.nightHeart.baselineRhr} bpm` : ""}`
-                    : "Awaiting overnight readings"}
-                </div>
-                <div className="mt-3 pt-3 border-t border-outline-variant/50 flex justify-end">
-                  <span className="text-xs font-semibold text-on-surface-variant group-hover:text-on-surface transition-colors">
-                    See more →
-                  </span>
-                </div>
-              </div>
-            </Link>
+                {/* Score */}
+                <StatCard
+                  tone="sleep"
+                  shade="strong"
+                  size="feature"
+                  eyebrow="Sleep score"
+                  topRight={<StatPill tone="sleep">Target &gt;{SLEEP_SCORE_TARGET}</StatPill>}
+                  className="md:col-span-2"
+                >
+                  <StatValue
+                    tone="sleep"
+                    size="feature"
+                    value={String(night.holisticScore)}
+                    unit="/ 100"
+                    caption={<a href="#score-breakdown" className="font-medium text-sleep-ink hover:underline">How this is calculated</a>}
+                  />
+                </StatCard>
 
-            {/* ⑤ Bottom breakdown zone — score detail (compact) + architecture, side by side */}
-            {data.lastNight && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter items-start">
+                {/* Total sleep */}
+                <StatCard tone="sleep" shade="soft" size="tall" eyebrow="Total sleep" className="md:col-span-2">
+                  <StatDuration
+                    tone="sleep"
+                    size="tall"
+                    hours={asleep.hours}
+                    minutes={asleep.minutes}
+                    caption={`${formatDurationMins(totals.inBedMins)} in bed`}
+                  />
+                </StatCard>
 
-                {/* Sleep Score breakdown (compact: score de-emphasised, expander shows components) */}
-                <SleepScoreCard
-                  score={data.lastNight.holisticScore || 0}
-                  breakdown={data.lastNight.holisticBreakdown}
-                  compact
-                />
+                {/* Efficiency */}
+                <StatCard tone="sleep" shade="soft" size="tall" eyebrow="Efficiency" className="md:col-span-2">
+                  <StatValue
+                    tone="sleep"
+                    size="tall"
+                    value={totals.efficiency === null ? "—" : String(Math.round(totals.efficiency * 100))}
+                    unit={totals.efficiency === null ? undefined : "%"}
+                    unitLarge
+                    caption={totals.efficiency === null ? undefined : `${formatDurationMins(totals.awakeInBedMins)} awake in bed`}
+                  />
+                </StatCard>
 
-                {/* Architecture Breakdown */}
-                <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding">
-                  <h2 className="font-display text-xl font-bold text-black tracking-tight mb-6">Architecture Breakdown</h2>
+                {/* How I felt: dashed until something is logged */}
+                {nightOf && (
+                  <HowIFelt logged={hasLoggedFeeling} className="md:col-span-3">
+                    <NightFeelingInput
+                      key={nightOf}
+                      nightOf={nightOf}
+                      initialTagIds={initialTagIds}
+                      isCurrentNight={!missingNight && targetDate === localToday()}
+                    />
+                  </HowIFelt>
+                )}
 
-                  <div className="space-y-6">
-
-                    {/* Deep Sleep */}
-                    <div>
-                      <div className="flex justify-between items-end mb-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-on-surface">Deep Sleep</span>
-                            {data.lastNight.continuity && (
-                              <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-sm ${
-                                data.lastNight.continuity.status === "consolidated" ? "bg-indigo-100 text-indigo-800" :
-                                data.lastNight.continuity.status === "fragmented"   ? "bg-amber-100 text-amber-800" :
-                                "bg-surface-container text-on-surface-variant"
-                              }`}>
-                                {data.lastNight.continuity.status}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-on-surface-variant mt-0.5">Physical recovery &amp; muscular restoration</p>
-                        </div>
-                        <div className="text-right shrink-0 ml-4">
-                          <span className="font-display text-lg font-bold text-black">{data.analytics?.architecture?.deepPercentage || 0}%</span>
-                          <span className="text-xs text-on-surface-variant ml-1">/ 15-20%</span>
-                        </div>
+                {/* Night heart rate */}
+                {nightOf && heartLink && (
+                  restingHr !== null ? (
+                    <StatCard
+                      tone="heart"
+                      eyebrow="Night heart rate"
+                      className="md:col-span-3"
+                      topRight={heartStatus ? <StatPill tone="heart"><span className="capitalize">{heartStatus}</span></StatPill> : undefined}
+                    >
+                      <div className="flex flex-wrap items-end justify-between gap-3">
+                        <StatValue tone="heart" size="tile" value={String(restingHr)} unit="bpm" caption={heartCaption ?? undefined} />
+                        <Link href={heartLink} className="text-sm font-medium text-heart-ink hover:underline">See more →</Link>
                       </div>
-                      <div className="h-2 w-full bg-surface-container-high rounded-full overflow-hidden">
-                        <div className="h-full bg-black rounded-full transition-all duration-500" style={{ width: `${data.analytics?.architecture?.deepPercentage || 0}%` }} />
-                      </div>
-                      {data.lastNight.continuity && <ContinuityExplainer stage="deep" data={data.lastNight.continuity} />}
-                    </div>
+                    </StatCard>
+                  ) : (
+                    <EmptyStateCard
+                      eyebrow="Night heart rate"
+                      className="md:col-span-3"
+                      topRight={<Link href={heartLink} className="text-sm font-medium text-on-surface-variant hover:text-on-surface">See more →</Link>}
+                    >
+                      <p className="text-xl text-on-surface">Awaiting overnight readings</p>
+                    </EmptyStateCard>
+                  )
+                )}
 
-                    {/* REM Sleep */}
-                    <div>
-                      <div className="flex justify-between items-end mb-2">
-                        <div>
-                          <span className="text-sm font-semibold text-on-surface">REM Sleep</span>
-                          <p className="text-xs text-on-surface-variant mt-0.5">Cognitive filing &amp; mental clarity consolidation</p>
-                        </div>
-                        <div className="text-right shrink-0 ml-4">
-                          <span className="font-display text-lg font-bold text-black">{data.analytics?.architecture?.remPercentage || 0}%</span>
-                          <span className="text-xs text-on-surface-variant ml-1">/ 20-25%</span>
-                        </div>
-                      </div>
-                      <div className="h-2 w-full bg-surface-container-high rounded-full overflow-hidden">
-                        <div className="h-full bg-primary-container rounded-full transition-all duration-500 border border-outline-variant" style={{ width: `${data.analytics?.architecture?.remPercentage || 0}%` }} />
-                      </div>
-                      {data.lastNight.remContinuity && <ContinuityExplainer stage="rem" data={data.lastNight.remContinuity} />}
-                    </div>
-
-                    {/* Light Sleep */}
-                    <div>
-                      <div className="flex justify-between items-end mb-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-on-surface">Light Sleep</span>
-                            {data.lastNight.lightStability && (
-                              <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-sm ${
-                                data.lastNight.lightStability.status === "optimal"    ? "bg-emerald-100 text-emerald-800" :
-                                data.lastNight.lightStability.status === "disruptive" ? "bg-red-100 text-red-800" :
-                                "bg-amber-100 text-amber-800"
-                              }`}>
-                                {data.lastNight.lightStability.status}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-on-surface-variant mt-0.5">Transitionary bridge &amp; basal processing</p>
-                        </div>
-                        <div className="text-right shrink-0 ml-4">
-                          <span className="font-display text-lg font-bold text-black">{data.analytics?.architecture?.lightPercentage || 0}%</span>
-                          <span className="text-xs text-on-surface-variant ml-1">/ 50-60%</span>
-                        </div>
-                      </div>
-                      <div className="h-2 w-full bg-surface-container-high rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-400 rounded-full transition-all duration-500 border border-outline-variant" style={{ width: `${data.analytics?.architecture?.lightPercentage || 0}%` }} />
-                      </div>
-                      {data.lastNight.lightStability && <ContinuityExplainer stage="light" data={data.lastNight.lightStability} />}
-                    </div>
-
+                {/* Sleep timeline */}
+                <NeutralCard className="md:col-span-6">
+                  <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 className={`${EYEBROW} text-on-surface-variant`}>Sleep timeline</h2>
+                    <p className="text-sm text-on-surface-variant">
+                      {formatClockTime(night.startTime)} – {formatClockTime(night.endTime)}
+                    </p>
                   </div>
+                  <HypnogramChart
+                    timeline={night.timeline}
+                    sessionStart={night.startTime}
+                    sessionEnd={night.endTime}
+                    restlessEvents={night.restlessness.restlessEvents}
+                    restlessnessSource={night.restlessness.source}
+                    bare
+                  />
+                </NeutralCard>
+
+                {/* Architecture */}
+                <ArchitectureCard rows={architectureRows} className="md:col-span-6" />
+
+                {/* Score breakdown: target of "How this is calculated" */}
+                <div id="score-breakdown" className="md:col-span-6 scroll-mt-6">
+                  <SleepScoreCard score={night.holisticScore || 0} breakdown={night.holisticBreakdown} compact />
                 </div>
 
               </div>

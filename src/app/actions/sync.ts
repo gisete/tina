@@ -6,7 +6,7 @@ import { sleepSessions, heartRateSummaries, syncState } from "@/db/schema";
 import { runSyncStep } from "@/lib/sync/step";
 import { ensureNightSamples } from "@/lib/sync/night-samples";
 import { assembleDashboardData } from "@/lib/sync/assemble";
-import { selectMainSessions, buildDebtHistory, calculateSleepDebt } from "@/lib/analytics/sleep";
+import { selectMainSessions, buildDebtHistory, calculateSleepDebt, resolveSelectedNight, toSelectedNightView } from "@/lib/analytics/sleep";
 import { localToday, addDays } from "@/lib/dates";
 import { eq, and, asc, desc, gte, lt, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -80,8 +80,15 @@ export async function readDashboardData(targetDate?: string) {
     currentStateRows ?? undefined,
   );
 
+  // Which night the picked date implies, and whether it is actually recorded.
+  // Plain primitives only: this crosses the server→client boundary.
+  const today = localToday();
+  const resolved = resolveSelectedNight({ sessions: historicalSessions, selectedDate: targetDate ?? today, today });
+  const selectedNight = toSelectedNightView(resolved);
+
   return {
     ...assembled,
+    selectedNight,
     lastSyncedAt: syncRow?.lastSyncedAt?.toISOString() ?? null,
   };
 }

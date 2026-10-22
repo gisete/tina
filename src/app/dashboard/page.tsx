@@ -4,6 +4,8 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import SyncButton from "./components/sync-button";
+import { formatEfficiency } from "@/lib/format";
+import LastRecordedNightTag from "./components/last-recorded-night-tag";
 
 function formatSleepMs(ms: number): string {
   const hours = Math.floor(ms / 3_600_000);
@@ -44,12 +46,17 @@ export default async function DashboardOverviewPage() {
   const hasData = data?.hasData === true;
 
   // Sleep derived values
-  const efficiency = hasData
-    ? Math.round((data!.latestSummary?.efficiencyScore ?? 0) * 100)
-    : null;
+  const rawEfficiency = hasData ? data!.latestSummary?.efficiencyScore : undefined;
+  const efficiency = formatEfficiency(
+    rawEfficiency === null || rawEfficiency === undefined ? null : rawEfficiency * 100,
+  );
   const debtHours    = hasData ? (data!.analytics?.debt?.cumulativeDebtHours ?? 0) : null;
   const debtSeverity = hasData ? (data!.analytics?.debt?.severity ?? "Optimal") : null;
   const lastNight    = hasData ? (data!.lastNight ?? null) : null;
+  // Overview is as-of-today: loadPageData() resolves today's implied night.
+  // When that night is missing, lastNight is an older night and must say so.
+  const selected     = hasData ? data!.selectedNight : null;
+  const staleNight   = selected?.status === "missing";
 
   // Heart derived values — daily array is sorted ascending by the analytics engine
   const heartDaily = hasData ? (data!.heart?.daily ?? []) : [];
@@ -94,11 +101,18 @@ export default async function DashboardOverviewPage() {
 
           <div>
             <div className="font-display text-5xl font-bold text-on-surface tracking-tight">
-              {efficiency !== null
-                ? <>{efficiency}<span className="text-2xl text-on-surface-variant font-normal ml-0.5">%</span></>
-                : <span className="text-on-surface-variant">—</span>}
+              {efficiency.endsWith("%")
+                ? <>{efficiency.slice(0, -1)}<span className="text-2xl text-on-surface-variant font-normal ml-0.5">%</span></>
+                : <span className="text-on-surface-variant">{efficiency}</span>}
             </div>
-            <p className="font-sans text-sm text-on-surface-variant mt-1">Sleep Efficiency</p>
+            <p className="font-sans text-sm text-on-surface-variant mt-1">
+              Sleep Efficiency
+              {staleNight && lastNight && <LastRecordedNightTag nightOf={lastNight.sleepDate} />}
+            </p>
+
+            {staleNight && !lastNight && (
+              <p className="font-sans text-xs text-on-surface-variant mt-3">No recent night recorded</p>
+            )}
 
             {lastNight && (
               <div className="mt-3">
@@ -111,6 +125,7 @@ export default async function DashboardOverviewPage() {
                 </div>
                 <p className="font-sans text-xs text-on-surface-variant mt-1.5">
                   {formatSleepMs(lastNight.totalSleepMs)} total sleep
+                  {staleNight && <LastRecordedNightTag nightOf={lastNight.sleepDate} />}
                 </p>
               </div>
             )}
