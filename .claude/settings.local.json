@@ -17,7 +17,11 @@
       "Bash(git commit *)",
       "Bash(gh repo *)",
       "Bash(brew install *)",
-      "WebFetch(domain:developers.google.com)"
+      "WebFetch(domain:developers.google.com)",
+      "Bash(cat)",
+      "Bash(npx tsx *)",
+      "Bash(rm /tmp/filter-check.ts)",
+      "Bash(git push *)"
     ]
   }
 }
