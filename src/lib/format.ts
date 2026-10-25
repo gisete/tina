@@ -54,6 +54,14 @@ export function formatEfficiency(percent: number | null | undefined): string {
 }
 
 /**
+ * Sleep-debt window basis: "based on 14 nights over 19 days" when the recorded
+ * nights span more than the 14-day window (gaps in the data), otherwise null.
+ */
+export function formatDebtBasis(nightsUsed: number, windowSpanDays: number): string | null {
+  return windowSpanDays > 14 ? `based on ${nightsUsed} nights over ${windowSpanDays} days` : null;
+}
+
+/**
  * "YYYY-MM-DD" (the night's start date) → "Night of Tue, Oct 20 → Wed, Oct 21".
  * Weekday comes from local-date construction (parseLocalDate), never a UTC parse.
  */

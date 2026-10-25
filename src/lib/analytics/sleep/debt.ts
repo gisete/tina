@@ -34,6 +34,10 @@ export interface SleepDebt {
   cumulativeDebtHours: number;
   /** Effective look-back window used for the decay calculation. */
   weightedWindowDays: number;
+  /** Main sessions inside the window (at most DEBT_WINDOW_DAYS). */
+  nightsUsed: number;
+  /** Calendar days from the oldest to the newest session in the window, inclusive; 0 when empty. */
+  windowSpanDays: number;
   timeline: SleepDebtEntry[];
   severity: "high" | "moderate" | "optimal";
 }
@@ -99,7 +103,7 @@ export function calculateSleepDebt(
     .slice(-DEBT_WINDOW_DAYS);
 
   if (sorted.length === 0) {
-    return { cumulativeDebtHours: 0, weightedWindowDays: 0, timeline: [], severity: "optimal" };
+    return { cumulativeDebtHours: 0, weightedWindowDays: 0, nightsUsed: 0, windowSpanDays: 0, timeline: [], severity: "optimal" };
   }
 
   // Decayed sum from sessions[0..upTo] with sessions[upTo] as age-0 reference.
@@ -128,5 +132,14 @@ export function calculateSleepDebt(
     : cumulativeDebtHours >= 5 ? "moderate"
     : "optimal";
 
-  return { cumulativeDebtHours, weightedWindowDays: DEBT_WINDOW_DAYS, timeline, severity };
+  const windowSpanDays = daysBetween(sorted[0].sleepDate, sorted[sorted.length - 1].sleepDate) + 1;
+
+  return {
+    cumulativeDebtHours,
+    weightedWindowDays: DEBT_WINDOW_DAYS,
+    nightsUsed: sorted.length,
+    windowSpanDays,
+    timeline,
+    severity,
+  };
 }

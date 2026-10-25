@@ -19,7 +19,7 @@ import { FEELING_TAGS } from "@/lib/analytics/feeling-tags";
 import { MIN_CIRCADIAN_NIGHTS, SLEEP_SCORE_TARGET, summarizeNightTotals } from "@/lib/analytics/sleep";
 import MissingNightCard from "../components/missing-night-card";
 import { addDays, localToday } from "@/lib/dates";
-import { formatClockTime, formatDurationMins, formatNightRange, splitDurationMins } from "@/lib/format";
+import { formatClockTime, formatDebtBasis, formatDurationMins, formatNightRange, splitDurationMins } from "@/lib/format";
 
 function HowIFelt({ logged, className, children }: { logged: boolean; className: string; children: ReactNode }) {
   return logged ? (
@@ -71,6 +71,8 @@ export default async function SleepPage({
   const totals = night ? summarizeNightTotals(night.totalSleepMs, night.startTime, night.endTime) : null;
   const asleep = splitDurationMins(totals?.asleepMins ?? 0);
   const circadian = data?.hasData === true ? data.currentState.variance : null;
+  const debtState = data?.hasData === true ? data.currentState.debt : null;
+  const debtBasis = debtState ? formatDebtBasis(debtState.nightsUsed, debtState.windowSpanDays) : null;
   const hasLoggedFeeling = initialTagIds.some((id) => FEELING_TAGS.some((t) => t.id === id));
 
   const nightHeart = data?.hasData === true ? data.nightHeart : null;
@@ -304,7 +306,12 @@ export default async function SleepPage({
                       size="tile"
                       value={String(data.currentState.debt.cumulativeDebtHours)}
                       unit="hrs"
-                      caption="Decay-weighted deficit over the last 14 nights"
+                      caption={
+                        <>
+                          Decay-weighted deficit over the last 14 recorded nights
+                          {debtBasis && <span className="block">{debtBasis}</span>}
+                        </>
+                      }
                     />
                     <p className="mt-3 text-right text-sm font-medium text-sleep-muted transition-colors group-hover:text-sleep-ink">
                       View history →

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { fetchDebtSessions } from "@/app/actions/sync";
 import DebtChart from "./debt-chart";
+import { formatDebtBasis } from "@/lib/format";
 import { EYEBROW, EmptyStateCard, NeutralCard, StatCard, StatValue } from "../../components/stat-card";
 
 export default async function SleepDebtPage({
@@ -25,6 +26,8 @@ export default async function SleepDebtPage({
   } catch (error) {
     console.error("Debt page error:", error);
   }
+
+  const debtBasis = debtData ? formatDebtBasis(debtData.nightsUsed, debtData.windowSpanDays) : null;
 
   const severityClass =
     debtData?.currentSeverity === "high"     ? "bg-red-100 text-red-700" :
@@ -47,7 +50,7 @@ export default async function SleepDebtPage({
         <div>
           <PageTitle className="mb-2">Sleep Debt</PageTitle>
           <p className="text-base text-on-surface-variant max-w-xl">
-            Decay-weighted deficit over the last 14 nights. Recent bad nights weigh more; a surplus night
+            Decay-weighted deficit over the last 14 recorded nights. Recent bad nights weigh more; a surplus night
             recovers debt at half-efficiency.
           </p>
         </div>
@@ -59,7 +62,7 @@ export default async function SleepDebtPage({
             className="w-full md:w-72"
             topRight={<span className={`shrink-0 rounded-full px-2.5 py-[3px] text-xs font-medium ${severityClass}`}>{debtData.currentSeverity}</span>}
           >
-            <StatValue tone="sleep" size="tile" value={String(debtData.currentDebtHours)} unit="hrs" />
+            <StatValue tone="sleep" size="tile" value={String(debtData.currentDebtHours)} unit="hrs" caption={debtBasis ?? undefined} />
           </StatCard>
         )}
       </div>

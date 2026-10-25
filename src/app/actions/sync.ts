@@ -173,5 +173,7 @@ export async function fetchDebtSessions(daysBack: number = 90) {
     history,
     currentDebtHours: summary.cumulativeDebtHours,
     currentSeverity: summary.severity,
+    nightsUsed: summary.nightsUsed,
+    windowSpanDays: summary.windowSpanDays,
   };
 }

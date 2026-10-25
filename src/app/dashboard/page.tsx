@@ -5,7 +5,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import SyncButton from "./components/sync-button";
-import { formatEfficiency } from "@/lib/format";
+import { formatDebtBasis, formatEfficiency } from "@/lib/format";
 import LastRecordedNightTag from "./components/last-recorded-night-tag";
 import { EmptyStateCard, StatCard, StatValue } from "./components/stat-card";
 
@@ -52,6 +52,7 @@ export default async function DashboardOverviewPage() {
     rawEfficiency === null || rawEfficiency === undefined ? null : rawEfficiency * 100,
   );
   const debtHours    = hasData ? (data!.analytics?.debt?.cumulativeDebtHours ?? 0) : null;
+  const debtBasis    = hasData && data!.analytics?.debt ? formatDebtBasis(data!.analytics.debt.nightsUsed, data!.analytics.debt.windowSpanDays) : null;
   const debtSeverity = hasData ? (data!.analytics?.debt?.severity ?? "Optimal") : null;
   const lastNight    = hasData ? (data!.lastNight ?? null) : null;
   // Overview is as-of-today: loadPageData() resolves today's implied night.
@@ -136,7 +137,7 @@ export default async function DashboardOverviewPage() {
               <div className="mt-4 flex items-center justify-between border-t border-white/60 pt-4">
                 <div>
                   {debtHours !== null
-                    ? <><span className="text-lg font-medium">{debtHours} hrs</span><span className="ml-1.5 text-xs text-sleep-muted">accumulated debt</span></>
+                    ? <><span className="text-lg font-medium">{debtHours} hrs</span><span className="ml-1.5 text-xs text-sleep-muted">accumulated debt</span>{debtBasis && <span className="block text-xs text-sleep-muted">{debtBasis}</span>}</>
                     : <span className="text-xs text-sleep-muted">No data yet</span>}
                 </div>
                 <span className="text-sm font-medium text-sleep-muted transition-colors group-hover:text-sleep-ink">
