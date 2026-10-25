@@ -1,17 +1,18 @@
 import ExpandableCard from "../../components/expandable-card";
+import { EYEBROW, NeutralCard } from "../../components/stat-card";
 import type { MindsetItem } from "@/lib/today/types";
 
 export function Mantras({ items }: { items: MindsetItem[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
-      <h2 className="font-display text-xl font-bold text-on-surface tracking-tight mb-3">Mantras</h2>
+    <NeutralCard>
+      <h2 className={`${EYEBROW} mb-4 text-on-surface-variant`}>Mantras</h2>
       <ul className="space-y-2">
         {items.map((m) => (
           <li key={m.id} className="text-sm text-on-surface">{m.text}</li>
         ))}
       </ul>
-    </div>
+    </NeutralCard>
   );
 }
 

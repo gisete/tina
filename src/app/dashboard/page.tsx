@@ -7,6 +7,7 @@ import { loadPageData } from "@/app/actions/sync";
 import SyncButton from "./components/sync-button";
 import { formatEfficiency } from "@/lib/format";
 import LastRecordedNightTag from "./components/last-recorded-night-tag";
+import { EmptyStateCard, StatCard, StatValue } from "./components/stat-card";
 
 function formatSleepMs(ms: number): string {
   const hours = Math.floor(ms / 3_600_000);
@@ -19,13 +20,12 @@ function formatSleepMs(ms: number): string {
 function debtBadge(severity: string): string {
   if (severity === "high")     return "bg-red-100 text-red-700";
   if (severity === "moderate") return "bg-amber-100 text-amber-700";
-  return "bg-surface-container text-on-surface-variant";
+  return "bg-white text-sleep-ink";
 }
 
 function heartStatusBadge(status: string): string {
   if (status === "Elevated Stress") return "bg-amber-100 text-amber-700";
-  if (status === "Stable Baseline") return "bg-secondary-container text-on-surface";
-  return "bg-surface-container text-on-surface-variant";
+  return "bg-white text-heart-ink";
 }
 
 export default async function DashboardOverviewPage() {
@@ -82,129 +82,125 @@ export default async function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter">
+      {/* Module cards */}
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
 
-        {/* Sleep Intelligence Card */}
-        <Link
-          href="/dashboard/sleep"
-          className="group bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] hover:border-outline transition-all min-h-[220px]"
-        >
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <span className="text-2xl">🌙</span>
-              <h2 className="font-display text-xl font-bold text-on-surface tracking-tight mt-2">Sleep Intelligence</h2>
-            </div>
-            <span className={`px-2.5 py-1 text-xs font-semibold rounded-full shrink-0 ${debtSeverity ? debtBadge(debtSeverity) : "bg-surface-container text-on-surface-variant"}`}>
-              {debtSeverity ?? "No data"}
-            </span>
-          </div>
-
-          <div>
-            <div className="font-display text-5xl font-bold text-on-surface tracking-tight">
-              {efficiency.endsWith("%")
-                ? <>{efficiency.slice(0, -1)}<span className="text-2xl text-on-surface-variant font-normal ml-0.5">%</span></>
-                : <span className="text-on-surface-variant">{efficiency}</span>}
-            </div>
-            <p className="font-sans text-sm text-on-surface-variant mt-1">
-              Sleep Efficiency
-              {staleNight && lastNight && <LastRecordedNightTag nightOf={lastNight.sleepDate} />}
-            </p>
-
-            {staleNight && !lastNight && (
-              <p className="font-sans text-xs text-on-surface-variant mt-3">No recent night recorded</p>
-            )}
-
-            {lastNight && (
-              <div className="mt-3">
-                {/* Micro stacked bar — segments sum to 100% of container width */}
-                <div className="flex h-1.5 rounded-full overflow-hidden">
-                  {lastNight.breakdown.deepPercent  > 0 && <div className="bg-indigo-500"  style={{ width: `${lastNight.breakdown.deepPercent}%`  }} />}
-                  {lastNight.breakdown.remPercent   > 0 && <div className="bg-violet-400"  style={{ width: `${lastNight.breakdown.remPercent}%`   }} />}
-                  {lastNight.breakdown.lightPercent > 0 && <div className="bg-slate-300"   style={{ width: `${lastNight.breakdown.lightPercent}%` }} />}
-                  {lastNight.breakdown.awakePercent > 0 && <div className="bg-amber-300"   style={{ width: `${lastNight.breakdown.awakePercent}%` }} />}
-                </div>
-                <p className="font-sans text-xs text-on-surface-variant mt-1.5">
-                  {formatSleepMs(lastNight.totalSleepMs)} total sleep
-                  {staleNight && <LastRecordedNightTag nightOf={lastNight.sleepDate} />}
-                </p>
-              </div>
-            )}
-
-            <div className="mt-4 pt-4 border-t border-outline-variant flex items-center justify-between">
-              <div>
-                {debtHours !== null
-                  ? <><span className="font-display text-lg font-semibold text-on-surface">{debtHours} hrs</span><span className="font-sans text-xs text-on-surface-variant ml-1.5">accumulated debt</span></>
-                  : <span className="font-sans text-xs text-on-surface-variant">No data yet</span>}
-              </div>
-              <span className="font-sans text-xs font-semibold text-on-surface-variant group-hover:text-on-surface transition-colors">
-                View details →
+        {/* Sleep Intelligence Card. The "high" debt badge stays red (warning). */}
+        <Link href="/dashboard/sleep" className="group block">
+          <StatCard
+            tone="sleep"
+            eyebrow="Sleep intelligence"
+            size="feature"
+            className="h-full"
+            topRight={
+              <span className={`shrink-0 rounded-full px-2.5 py-[3px] text-xs font-medium ${debtSeverity ? debtBadge(debtSeverity) : "bg-white text-sleep-ink"}`}>
+                {debtSeverity ?? "No data"}
               </span>
+            }
+          >
+            <div>
+              <StatValue
+                tone="sleep"
+                size="tall"
+                value={efficiency.endsWith("%") ? efficiency.slice(0, -1) : efficiency}
+                unit={efficiency.endsWith("%") ? "%" : undefined}
+                unitLarge
+                caption={
+                  <>
+                    Sleep efficiency
+                    {staleNight && lastNight && <LastRecordedNightTag nightOf={lastNight.sleepDate} />}
+                  </>
+                }
+              />
+
+              {staleNight && !lastNight && (
+                <p className="mt-3 text-xs text-sleep-muted">No recent night recorded</p>
+              )}
+
+              {lastNight && (
+                <div className="mt-4">
+                  {/* Micro stacked bar: segments sum to 100% of container width */}
+                  <div className="flex h-1.5 overflow-hidden rounded-full">
+                    {lastNight.breakdown.deepPercent  > 0 && <div className="bg-stage-deep"  style={{ width: `${lastNight.breakdown.deepPercent}%`  }} />}
+                    {lastNight.breakdown.remPercent   > 0 && <div className="bg-stage-rem"   style={{ width: `${lastNight.breakdown.remPercent}%`   }} />}
+                    {lastNight.breakdown.lightPercent > 0 && <div className="bg-stage-light" style={{ width: `${lastNight.breakdown.lightPercent}%` }} />}
+                    {lastNight.breakdown.awakePercent > 0 && <div className="bg-stage-awake" style={{ width: `${lastNight.breakdown.awakePercent}%` }} />}
+                  </div>
+                  <p className="mt-1.5 text-xs text-sleep-muted">
+                    {formatSleepMs(lastNight.totalSleepMs)} total sleep
+                    {staleNight && <LastRecordedNightTag nightOf={lastNight.sleepDate} />}
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-4 flex items-center justify-between border-t border-white/60 pt-4">
+                <div>
+                  {debtHours !== null
+                    ? <><span className="text-lg font-medium">{debtHours} hrs</span><span className="ml-1.5 text-xs text-sleep-muted">accumulated debt</span></>
+                    : <span className="text-xs text-sleep-muted">No data yet</span>}
+                </div>
+                <span className="text-sm font-medium text-sleep-muted transition-colors group-hover:text-sleep-ink">
+                  View details →
+                </span>
+              </div>
             </div>
-          </div>
+          </StatCard>
         </Link>
 
         {/* Heart Health Card */}
-        <Link
-          href="/dashboard/heart"
-          className="group bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] hover:border-outline transition-all min-h-[220px]"
-        >
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <span className="text-2xl">❤️</span>
-              <h2 className="font-display text-xl font-bold text-on-surface tracking-tight mt-2">Heart Health</h2>
-            </div>
-            <span className={`px-2.5 py-1 text-xs font-semibold rounded-full shrink-0 ${heartStatusBadge(heartStatus)}`}>
-              {heartStatus}
-            </span>
-          </div>
-
-          <div>
-            <div className="font-display text-5xl font-bold text-on-surface tracking-tight">
-              {latestRhr !== null
-                ? <>{latestRhr}<span className="text-2xl text-on-surface-variant font-normal ml-0.5">bpm</span></>
-                : <span className="text-on-surface-variant">—</span>}
-            </div>
-            <p className="font-sans text-sm text-on-surface-variant mt-1">Resting heart rate</p>
-
-            <div className="mt-4 pt-4 border-t border-outline-variant flex items-center justify-between">
-              <div>
-                {latestHrv !== null
-                  ? <><span className="font-display text-lg font-semibold text-on-surface">{latestHrv}</span><span className="font-sans text-xs text-on-surface-variant ml-1.5">ms HRV</span></>
-                  : <span className="font-sans text-xs text-on-surface-variant">No HRV data yet</span>}
-              </div>
-              <span className="font-sans text-xs font-semibold text-on-surface-variant group-hover:text-on-surface transition-colors">
-                View details →
+        <Link href="/dashboard/heart" className="group block">
+          <StatCard
+            tone="heart"
+            eyebrow="Heart health"
+            size="feature"
+            className="h-full"
+            topRight={
+              <span className={`shrink-0 rounded-full px-2.5 py-[3px] text-xs font-medium ${heartStatusBadge(heartStatus)}`}>
+                {heartStatus}
               </span>
+            }
+          >
+            <div>
+              <StatValue
+                tone="heart"
+                size="tall"
+                value={latestRhr !== null ? String(latestRhr) : "—"}
+                unit={latestRhr !== null ? "bpm" : undefined}
+                caption="Resting heart rate"
+              />
+              <div className="mt-4 flex items-center justify-between border-t border-white/60 pt-4">
+                <div>
+                  {latestHrv !== null
+                    ? <><span className="text-lg font-medium">{latestHrv}</span><span className="ml-1.5 text-xs text-heart-muted">ms HRV</span></>
+                    : <span className="text-xs text-heart-muted">No HRV data yet</span>}
+                </div>
+                <span className="text-sm font-medium text-heart-muted transition-colors group-hover:text-heart-ink">
+                  View details →
+                </span>
+              </div>
             </div>
-          </div>
+          </StatCard>
         </Link>
 
-        {/* Exercise & Endurance Card — inactive placeholder */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between opacity-50 cursor-not-allowed min-h-[220px]">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <span className="text-2xl">🏃‍♂️</span>
-              <h2 className="font-display text-xl font-bold text-on-surface tracking-tight mt-2">Exercise & Endurance</h2>
-            </div>
-            <span className="px-2.5 py-1 bg-surface-container text-on-surface-variant text-xs font-semibold rounded-full shrink-0">
+        {/* Exercise & Endurance Card: inactive placeholder */}
+        <EmptyStateCard
+          eyebrow="Exercise & Endurance"
+          className="cursor-not-allowed"
+          topRight={
+            <span className="shrink-0 rounded-full bg-surface-container px-2.5 py-[3px] text-xs font-medium text-on-surface-variant">
               Inactive
             </span>
-          </div>
-
+          }
+        >
           <div>
-            <div className="font-display text-5xl font-bold text-on-surface tracking-tight">
-              0<span className="text-2xl text-on-surface-variant font-normal ml-0.5">min</span>
-            </div>
-            <p className="font-sans text-sm text-on-surface-variant mt-1">Active zone minutes</p>
-
-            <div className="mt-4 pt-4 border-t border-outline-variant">
-              <p className="font-sans text-xs text-on-surface-variant">
-                Waiting for database migrations and normalizers.
-              </p>
-            </div>
+            <p className="flex items-baseline gap-x-2.5">
+              <span className="font-display text-[80px] font-light leading-[0.9] tracking-[-0.035em] text-on-surface-variant">0</span>
+              <span className="text-[22px] text-on-surface-variant">min</span>
+            </p>
+            <p className="mt-3 text-sm text-on-surface-variant">Active zone minutes</p>
+            <p className="mt-3 text-xs text-on-surface-variant">Waiting for database migrations and normalizers.</p>
           </div>
-        </div>
+        </EmptyStateCard>
 
       </div>
     </PageShell>

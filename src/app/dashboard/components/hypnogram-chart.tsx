@@ -94,7 +94,7 @@ export default function HypnogramChart({
 
   if (timeline.length === 0) {
     return (
-      <div className={bare ? "flex items-center justify-center h-[280px]" : "bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex items-center justify-center h-[280px]"}>
+      <div className={bare ? "flex items-center justify-center h-[280px]" : "rounded-card border border-hairline bg-white p-8 flex items-center justify-center h-[280px]"}>
         <p className="text-sm text-on-surface-variant">No stage data for this session.</p>
       </div>
     );
@@ -341,7 +341,7 @@ export default function HypnogramChart({
   if (bare) return inner;
 
   return (
-    <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding">
+    <div className="rounded-card border border-hairline bg-white p-8">
       {inner}
     </div>
   );
