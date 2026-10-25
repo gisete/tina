@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { loadPageData } from "@/app/actions/sync";
 import { readActivitySummaries } from "@/lib/sync/read";
 import SyncButton from "../components/sync-button";
+import { EYEBROW, EmptyStateCard, StatCard, StatPill, StatValue } from "../components/stat-card";
 import HeartCharts from "../components/heart-charts";
 import DateNavigator from "../components/date-navigator";
 import AzmTrendCard from "../components/azm-trend-card";
@@ -12,8 +13,7 @@ import { localToday, addDays } from "@/lib/dates";
 
 function statusBadge(status: string): string {
   if (status === "Elevated Stress") return "bg-amber-100 text-amber-700";
-  if (status === "Stable Baseline") return "bg-secondary-container text-on-surface";
-  return "bg-surface-container text-on-surface-variant";
+  return "bg-white text-heart-ink";
 }
 
 export default async function HeartPage({
@@ -81,83 +81,69 @@ export default async function HeartPage({
       <AzmTrendCard rows={activityRows} />
 
       {!hasHeartData ? (
-        <div className="rounded-[1.5rem] border border-dashed border-outline-variant bg-white p-12 text-center">
-          <h3 className="font-display text-sm font-semibold text-on-surface">No heart data found</h3>
-          <p className="mt-1 text-sm text-on-surface-variant">
-            Trigger your synchronization loop to pull records from your Fitbit profile.
-          </p>
-        </div>
+        <EmptyStateCard eyebrow="Heart">
+          <div>
+            <p className="text-base text-on-surface">No heart data found</p>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Trigger your synchronization loop to pull records from your Fitbit profile.
+            </p>
+          </div>
+        </EmptyStateCard>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-7">
 
           {/* Metric Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
 
-            {/* Resting HR */}
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-sm font-medium text-on-surface-variant">Resting Heart Rate</span>
-                <span className="px-2 py-0.5 bg-primary-container text-black font-semibold text-xs rounded-full">Target &lt;60 bpm</span>
-              </div>
-              <div>
-                <div className="font-display text-4xl font-bold text-black tracking-tight">
-                  {latestRhr !== null
-                    ? <>{latestRhr}<span className="text-xl text-on-surface-variant font-normal ml-0.5">bpm</span></>
-                    : <span className="text-on-surface-variant">—</span>}
-                </div>
-                <div className="text-sm text-on-surface-variant mt-1">
-                  {avgRhr !== null ? `${avgRhr} bpm historical average` : "Latest recorded reading"}
-                </div>
-              </div>
-            </div>
+            <StatCard tone="heart" eyebrow="Resting heart rate" topRight={<StatPill tone="heart">Target &lt;60 bpm</StatPill>}>
+              <StatValue
+                tone="heart"
+                size="tile"
+                value={latestRhr !== null ? String(latestRhr) : "—"}
+                unit={latestRhr !== null ? "bpm" : undefined}
+                caption={avgRhr !== null ? `${avgRhr} bpm historical average` : "Latest recorded reading"}
+              />
+            </StatCard>
 
-            {/* HRV */}
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-sm font-medium text-on-surface-variant">HRV (RMSSD)</span>
-                <span className="px-2 py-0.5 bg-secondary-container text-black font-semibold text-xs rounded-full">Target &gt;50 ms</span>
-              </div>
-              <div>
-                <div className="font-display text-4xl font-bold text-black tracking-tight">
-                  {latestHrv !== null
-                    ? <>{latestHrv}<span className="text-xl text-on-surface-variant font-normal ml-0.5">ms</span></>
-                    : <span className="text-on-surface-variant">—</span>}
-                </div>
-                <div className="text-sm text-on-surface-variant mt-1">
-                  {avgHrv !== null ? `${avgHrv} ms historical average` : "Overnight RMSSD measurement"}
-                </div>
-              </div>
-            </div>
+            <StatCard tone="heart" eyebrow="HRV (RMSSD)" topRight={<StatPill tone="heart">Target &gt;50 ms</StatPill>}>
+              <StatValue
+                tone="heart"
+                size="tile"
+                value={latestHrv !== null ? String(latestHrv) : "—"}
+                unit={latestHrv !== null ? "ms" : undefined}
+                caption={avgHrv !== null ? `${avgHrv} ms historical average` : "Overnight RMSSD measurement"}
+              />
+            </StatCard>
 
-            {/* Recovery Status */}
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-sm font-medium text-on-surface-variant">Recovery Status</span>
-                <span className={`px-2 py-0.5 font-semibold text-xs rounded-full ${statusBadge(latestStatus)}`}>
+            <StatCard
+              tone="heart"
+              eyebrow="Recovery status"
+              topRight={
+                <span className={`shrink-0 rounded-full px-2.5 py-[3px] text-xs font-medium ${statusBadge(latestStatus)}`}>
                   {latestStatus}
                 </span>
-              </div>
-              <div>
-                <div className="font-display text-4xl font-bold text-black tracking-tight">
-                  {baselineRhr !== null
-                    ? <>{baselineRhr}<span className="text-xl text-on-surface-variant font-normal ml-0.5">bpm</span></>
-                    : <span className="text-on-surface-variant">—</span>}
-                </div>
-                <div className="text-sm text-on-surface-variant mt-1">
-                  {baselineRhr !== null
+              }
+            >
+              <StatValue
+                tone="heart"
+                size="tile"
+                value={baselineRhr !== null ? String(baselineRhr) : "—"}
+                unit={baselineRhr !== null ? "bpm" : undefined}
+                caption={
+                  baselineRhr !== null
                     ? `7-day rolling baseline${baselineHrv !== null ? ` · ${baselineHrv} ms HRV` : ""}`
-                    : "Building baseline — more data needed"}
-                </div>
-              </div>
-            </div>
+                    : "Building baseline — more data needed"
+                }
+              />
+            </StatCard>
 
           </div>
 
-          {/* Historical Timeline Charts */}
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding">
-            <div className="mb-6">
-              <h2 className="font-display text-xl font-bold text-black tracking-tight">Historical Trends</h2>
-              <p className="text-sm text-on-surface-variant mt-1">
+          {/* Historical Timeline Charts: each chart is its own NeutralCard */}
+          <div>
+            <div className="mb-5">
+              <h2 className={`${EYEBROW} text-on-surface-variant`}>Historical trends</h2>
+              <p className="mt-1.5 text-sm text-on-surface-variant">
                 Solid lines show daily readings. Dashed lines show the rolling 7-day baseline used for anomaly detection.
               </p>
             </div>

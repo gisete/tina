@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
+import { EYEBROW, NeutralCard } from "./stat-card";
 
 interface HeartChartDay {
   date: string;
@@ -20,7 +21,7 @@ interface HeartChartDay {
 }
 
 const CHART_STYLE = {
-  container: "bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding h-[360px] flex flex-col",
+  container: "flex h-[400px] flex-col",
   grid: { strokeDasharray: "4 4", stroke: "#f6f4ea", vertical: false } as const,
   axis: { stroke: "#787869", fontSize: 12, tickLine: false, axisLine: false, style: { fontFamily: "var(--font-sans)" } } as const,
   tooltip: {
@@ -41,14 +42,14 @@ export default function HeartCharts({ data }: { data: HeartChartDay[] }) {
   }));
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
       {/* Resting HR trend */}
-      <div className={CHART_STYLE.container}>
+      <NeutralCard className={CHART_STYLE.container}>
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h3 className="font-display text-xl font-semibold text-black tracking-tight">Resting HR Trend</h3>
-            <p className="text-xs text-on-surface-variant mt-0.5">Actual vs 7-day rolling baseline</p>
+            <h3 className={`${EYEBROW} text-on-surface-variant`}>Resting HR trend</h3>
+            <p className="mt-1.5 text-sm text-on-surface-variant">Actual vs 7-day rolling baseline</p>
           </div>
           <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">bpm</span>
         </div>
@@ -93,7 +94,7 @@ export default function HeartCharts({ data }: { data: HeartChartDay[] }) {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-6 mt-3 pt-3 border-t border-outline-variant">
+        <div className="flex items-center gap-6 mt-3 pt-3 border-t border-hairline">
           <div className="flex items-center gap-2">
             <span className="block w-4 h-0.5 bg-on-surface rounded" />
             <span className="text-xs text-on-surface-variant font-medium">Actual</span>
@@ -103,14 +104,14 @@ export default function HeartCharts({ data }: { data: HeartChartDay[] }) {
             <span className="text-xs text-on-surface-variant font-medium">Baseline</span>
           </div>
         </div>
-      </div>
+      </NeutralCard>
 
       {/* HRV trend */}
-      <div className={CHART_STYLE.container}>
+      <NeutralCard className={CHART_STYLE.container}>
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h3 className="font-display text-xl font-semibold text-black tracking-tight">HRV Trend</h3>
-            <p className="text-xs text-on-surface-variant mt-0.5">Actual vs 7-day rolling baseline</p>
+            <h3 className={`${EYEBROW} text-on-surface-variant`}>HRV trend</h3>
+            <p className="mt-1.5 text-sm text-on-surface-variant">Actual vs 7-day rolling baseline</p>
           </div>
           <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">ms</span>
         </div>
@@ -155,7 +156,7 @@ export default function HeartCharts({ data }: { data: HeartChartDay[] }) {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-6 mt-3 pt-3 border-t border-outline-variant">
+        <div className="flex items-center gap-6 mt-3 pt-3 border-t border-hairline">
           <div className="flex items-center gap-2">
             <span className="block w-4 h-0.5 rounded" style={{ backgroundColor: "#7B6FA8" }} />
             <span className="text-xs text-on-surface-variant font-medium">Actual</span>
@@ -165,7 +166,7 @@ export default function HeartCharts({ data }: { data: HeartChartDay[] }) {
             <span className="text-xs text-on-surface-variant font-medium">Baseline</span>
           </div>
         </div>
-      </div>
+      </NeutralCard>
 
     </div>
   );

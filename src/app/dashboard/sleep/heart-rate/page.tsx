@@ -12,6 +12,7 @@ import HrTrendChart from "./hr-trend-chart";
 import RecoveryBalanceChart from "./recovery-balance-chart";
 import { localToday, addDays } from "@/lib/dates";
 import { formatClockTime, formatNightRange } from "@/lib/format";
+import { EYEBROW, EmptyStateCard, NeutralCard } from "../../components/stat-card";
 import { WINDOW_DAYS } from "@/lib/analytics/hr-trends";
 import { calculateStageHr } from "@/lib/analytics/sleep";
 
@@ -81,12 +82,12 @@ export default async function HeartRateDetailPage({
               <DateNavigator />
             </div>
           </div>
-          <div className="rounded-[1.5rem] border border-dashed border-outline-variant bg-white p-12 text-center">
-            <h3 className="font-display text-sm font-semibold text-on-surface">No sleep data found</h3>
-            <p className="mt-1 text-sm text-on-surface-variant">
-              Sync your device data to populate this view.
-            </p>
-          </div>
+          <EmptyStateCard eyebrow="Overnight heart rate">
+            <div>
+              <p className="text-base text-on-surface">No sleep data found</p>
+              <p className="mt-1 text-sm text-on-surface-variant">Sync your device data to populate this view.</p>
+            </div>
+          </EmptyStateCard>
         </>
       ) : (
         <>
@@ -131,10 +132,10 @@ export default async function HeartRateDetailPage({
               )}
             </div>
           ) : data.lastNight && data.nightHrSeries.length > 1 ? (
-            <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
+            <NeutralCard>
               <div className="mb-6">
-                <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">Heart Rate Curve</h2>
-                <p className="font-sans text-sm text-on-surface-variant mt-1">
+                <h2 className={`${EYEBROW} text-on-surface-variant`}>Heart rate curve</h2>
+                <p className="mt-1.5 text-sm text-on-surface-variant">
                   Beats per minute across the night — dips below the dashed line mark restorative stretches.
                 </p>
               </div>
@@ -148,7 +149,7 @@ export default async function HeartRateDetailPage({
 
               {/* Avg HR by stage — deep→light→REM→awake (low-to-high HR gradient) */}
               {stageHr && (
-                <div className="mt-4 pt-4 border-t border-outline-variant/50 grid grid-cols-4 gap-4">
+                <div className="mt-4 pt-4 border-t border-hairline grid grid-cols-4 gap-4">
                   {(["deep", "light", "rem", "awake"] as const).map((stage) => {
                     const LABELS = { deep: "Deep", light: "Light", rem: "REM", awake: "Awake" } as const;
                     const entry = stageHr[stage];
@@ -165,14 +166,16 @@ export default async function HeartRateDetailPage({
                   })}
                 </div>
               )}
-            </div>
+            </NeutralCard>
           ) : (
-            <div className="rounded-[1.5rem] border border-dashed border-outline-variant bg-white p-12 text-center">
-              <h3 className="font-display text-sm font-semibold text-on-surface">No heart rate samples for this night</h3>
-              <p className="mt-1 text-sm text-on-surface-variant">
-                Heart rate samples are fetched on first view — try navigating away and back.
-              </p>
-            </div>
+            <EmptyStateCard eyebrow="Heart rate curve">
+              <div>
+                <p className="text-base text-on-surface">No heart rate samples for this night</p>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  Heart rate samples are fetched on first view — try navigating away and back.
+                </p>
+              </div>
+            </EmptyStateCard>
           )}
 
           {/* ── HR trend — anchored to today, independent of ?date= ── */}
