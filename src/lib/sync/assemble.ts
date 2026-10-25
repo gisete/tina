@@ -129,6 +129,8 @@ export function assembleDashboardData(
 
   const chartTimeline = [...chartSource]
     .sort((a, b) => a.sleepDate.localeCompare(b.sleepDate))
+    // A main session with no positive time in bed can't be scored: plot no point.
+    .filter((s) => s.endTime.getTime() - s.startTime.getTime() > 0)
     .map((s) => {
       const timeInBedMs = s.endTime.getTime() - s.startTime.getTime();
       // Convert stage Date objects to ISO strings for the pure analytics engines.

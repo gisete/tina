@@ -78,8 +78,8 @@ function toIso(t: Date | string): string {
  * Accepts sessions whose stages carry full `startTime`/`endTime` data
  * (as returned by the DB query with `with: { stages: true }`).
  *
- * Returns `null` when the sessions array is empty or the latest session has
- * no stage rows.
+ * Returns `null` when the sessions array is empty, the latest session has
+ * no stage rows, or its time in bed is not positive (end <= start).
  *
  * Pure function — no framework imports, no side effects.
  */
@@ -95,6 +95,11 @@ export function getLastNightDetail(
 
   const stages = latest.stages ?? [];
   if (stages.length === 0) return null;
+
+  // A malformed session (end <= start) has no time in bed to score against.
+  const timeInBedMs =
+    new Date(toIso(latest.endTime)).getTime() - new Date(toIso(latest.startTime)).getTime();
+  if (!(timeInBedMs > 0)) return null;
 
   // Aggregate totals for breakdown percentages
   const totals = { deep: 0, light: 0, rem: 0, awake: 0 };
@@ -125,8 +130,6 @@ export function getLastNightDetail(
 
   const continuity   = calculateDeepSleepContinuity(timeline);
   const restlessness = calculateRestlessness(timeline);
-  const timeInBedMs  =
-    new Date(toIso(latest.endTime)).getTime() - new Date(toIso(latest.startTime)).getTime();
 
   return {
     sleepDate: latest.sleepDate,
