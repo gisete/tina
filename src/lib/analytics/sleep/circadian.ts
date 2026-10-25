@@ -1,9 +1,14 @@
 import type { AnalyticSession } from "./types";
 
+/** Fewest nights a bedtime variance is shown for; below it the UI shows "—". */
+export const MIN_CIRCADIAN_NIGHTS = 5;
+
 export interface CircadianVariance {
   averageBedtimeMinutesFromMidnight: number;
   standardDeviationMinutes: number;
   status: "stable" | "variable" | "erratic";
+  /** Sessions the variance was computed from. */
+  nights: number;
 }
 
 /**
@@ -12,7 +17,7 @@ export interface CircadianVariance {
  */
 export function calculateCircadianVariance(sessions: AnalyticSession[]): CircadianVariance {
   if (sessions.length < 2) {
-    return { averageBedtimeMinutesFromMidnight: 0, standardDeviationMinutes: 0, status: "stable" };
+    return { averageBedtimeMinutesFromMidnight: 0, standardDeviationMinutes: 0, status: "stable", nights: sessions.length };
   }
 
   // Convert each bedtime to minutes relative to midnight (-180 to 480 range to catch late nights vs early bedtimes)
@@ -38,6 +43,7 @@ export function calculateCircadianVariance(sessions: AnalyticSession[]): Circadi
   return {
     averageBedtimeMinutesFromMidnight: Math.round(mean),
     standardDeviationMinutes: stdDev,
-    status
+    status,
+    nights: sessions.length,
   };
 }

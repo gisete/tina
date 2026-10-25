@@ -16,7 +16,7 @@ import NightFeelingInput from "../components/night-feeling-input";
 import ArchitectureCard, { type ArchitectureRow } from "../components/architecture-card";
 import { EYEBROW, EmptyStateCard, NeutralCard, StatCard, StatDuration, StatPill, StatValue } from "../components/stat-card";
 import { FEELING_TAGS } from "@/lib/analytics/feeling-tags";
-import { SLEEP_SCORE_TARGET, summarizeNightTotals } from "@/lib/analytics/sleep";
+import { MIN_CIRCADIAN_NIGHTS, SLEEP_SCORE_TARGET, summarizeNightTotals } from "@/lib/analytics/sleep";
 import MissingNightCard from "../components/missing-night-card";
 import { addDays, localToday } from "@/lib/dates";
 import { formatClockTime, formatDurationMins, formatNightRange, splitDurationMins } from "@/lib/format";
@@ -70,6 +70,7 @@ export default async function SleepPage({
   const night = data?.hasData === true ? data.lastNight : null;
   const totals = night ? summarizeNightTotals(night.totalSleepMs, night.startTime, night.endTime) : null;
   const asleep = splitDurationMins(totals?.asleepMins ?? 0);
+  const circadian = data?.hasData === true ? data.currentState.variance : null;
   const hasLoggedFeeling = initialTagIds.some((id) => FEELING_TAGS.some((t) => t.id === id));
 
   const nightHeart = data?.hasData === true ? data.nightHeart : null;
@@ -312,20 +313,26 @@ export default async function SleepPage({
                 </StatCard>
               </Link>
 
-              {/* Circadian Rhythm */}
-              <StatCard
-                tone="sleep"
-                eyebrow="Circadian rhythm"
-                topRight={<StatPill tone="sleep">{data.currentState.variance?.status || "Stable"}</StatPill>}
-              >
-                <StatValue
+              {/* Circadian Rhythm: "—" until there are enough nights to mean something */}
+              {circadian && circadian.nights >= MIN_CIRCADIAN_NIGHTS ? (
+                <StatCard
                   tone="sleep"
-                  size="tile"
-                  value={`±${data.currentState.variance?.standardDeviationMinutes || 0}`}
-                  unit="m"
-                  caption="Bedtime variance over the last 14 nights"
-                />
-              </StatCard>
+                  eyebrow="Circadian rhythm"
+                  topRight={<StatPill tone="sleep">{circadian.status}</StatPill>}
+                >
+                  <StatValue
+                    tone="sleep"
+                    size="tile"
+                    value={`±${circadian.standardDeviationMinutes}`}
+                    unit="m"
+                    caption={`Bedtime variance over ${circadian.nights} recorded nights`}
+                  />
+                </StatCard>
+              ) : (
+                <StatCard tone="sleep" eyebrow="Circadian rhythm">
+                  <StatValue tone="sleep" size="tile" value="—" caption={`Needs at least ${MIN_CIRCADIAN_NIGHTS} nights`} />
+                </StatCard>
+              )}
 
             </div>
 
