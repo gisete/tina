@@ -2,6 +2,7 @@
 
 import type { SleepScoreBreakdown, SleepScoreComponentKey } from "@/lib/analytics/sleep";
 import ExpandableCard from "./expandable-card";
+import { EYEBROW, NeutralCard } from "./stat-card";
 
 const LABELS: Record<SleepScoreComponentKey, { label: string; description: string }> = {
   volume:      { label: "Total sleep",     description: "How much you slept" },
@@ -20,7 +21,7 @@ interface Props {
 
 // Shared pill — same markup in both the no-breakdown and breakdown paths.
 const TARGET_PILL = (
-  <span className="px-2 py-0.5 bg-primary-container text-black font-semibold text-xs rounded-full">
+  <span className="shrink-0 rounded-full bg-primary-container px-2.5 py-[3px] text-xs font-medium text-black">
     Target &gt;85
   </span>
 );
@@ -30,31 +31,29 @@ export default function SleepScoreCard({ score, breakdown, compact = false }: Pr
   // when last-night data is unavailable).
   if (!breakdown) {
     return (
-      <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
-        <div className="flex items-start justify-between mb-4">
-          <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">
-            Sleep Score
-          </h2>
+      <NeutralCard>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h2 className={`${EYEBROW} text-on-surface-variant`}>Sleep score</h2>
           {TARGET_PILL}
         </div>
-        <div className={`font-display font-bold text-black tracking-tight ${compact ? "text-2xl" : "text-4xl"}`}>{score}</div>
+        <div className={`font-display font-light tracking-[-0.03em] text-on-surface ${compact ? "text-4xl" : "text-6xl"}`}>{score}</div>
         {!compact && (
           <div className="text-sm text-on-surface-variant mt-1">
             Weighted composite of volume, efficiency, continuity, disruption, and cardiac recovery
           </div>
         )}
-      </div>
+      </NeutralCard>
     );
   }
 
   const overview = compact ? (
     <div className="flex items-baseline gap-2">
-      <span className="font-display text-2xl font-bold text-black tracking-tight">{score}</span>
+      <span className="font-display text-4xl font-light tracking-[-0.03em] text-on-surface">{score}</span>
       <span className="text-xs text-on-surface-variant">/ 100</span>
     </div>
   ) : (
     <>
-      <div className="font-display text-4xl font-bold text-black tracking-tight">{score}</div>
+      <div className="font-display text-6xl font-light tracking-[-0.03em] text-on-surface">{score}</div>
       <div className="text-sm text-on-surface-variant mt-1">
         Weighted composite of volume, efficiency, continuity, disruption, and cardiac recovery
       </div>
@@ -63,12 +62,11 @@ export default function SleepScoreCard({ score, breakdown, compact = false }: Pr
 
   return (
     <ExpandableCard
-      title="Sleep Score"
+      title="Sleep score"
       headerRight={TARGET_PILL}
       overview={overview}
       defaultExpanded={false}
       expandLabel="How this is calculated"
-      className="hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow"
     >
       <div className="space-y-3">
         {breakdown.components.map((c) => {
@@ -110,9 +108,9 @@ export default function SleepScoreCard({ score, breakdown, compact = false }: Pr
           );
         })}
 
-        <div className="pt-2 border-t border-outline-variant flex justify-between items-center">
+        <div className="pt-2 border-t border-hairline flex justify-between items-center">
           <span className="text-sm font-semibold text-on-surface">Total</span>
-          <span className="font-display text-lg font-bold text-black">{score}</span>
+          <span className="font-display text-lg font-medium text-on-surface">{score}</span>
         </div>
       </div>
     </ExpandableCard>

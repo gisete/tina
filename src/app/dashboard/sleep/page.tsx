@@ -118,12 +118,14 @@ export default async function SleepPage({
       </div>
 
       {!data || !data.hasData ? (
-        <div className="rounded-[1.5rem] border border-dashed border-outline-variant bg-white p-12 text-center">
-          <h3 className="font-display text-sm font-semibold text-on-surface">No sleep data found</h3>
-          <p className="mt-1 text-sm text-on-surface-variant">
-            Trigger your synchronization loop to pull records from your Fitbit profile.
-          </p>
-        </div>
+        <EmptyStateCard eyebrow="Sleep">
+          <div>
+            <p className="text-base text-on-surface">No sleep data found</p>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Trigger your synchronization loop to pull records from your Fitbit profile.
+            </p>
+          </div>
+        </EmptyStateCard>
       ) : (
         <div className="space-y-10">
 
@@ -272,56 +274,58 @@ export default async function SleepPage({
           {/* ════ CURRENT STATUS · as of today ══════════════════════════════ */}
           <div className="space-y-4">
 
-            <div className="flex items-baseline gap-2">
-              <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">Current status</h2>
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <h2 className={`${EYEBROW} text-on-surface-variant`}>Current status</h2>
               <span className="text-sm text-on-surface-variant">· as of today</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
 
-              {/* Sleep Debt — link to detail page */}
-              <Link
-                href="/dashboard/sleep/debt"
-                className="group bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] hover:border-outline transition-all"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <span className="text-sm font-medium text-on-surface-variant">Sleep Debt</span>
-                  <span className={`px-2 py-0.5 font-semibold text-xs rounded-full ${
-                    data.currentState.debt.severity === "high"     ? "bg-red-100 text-red-700" :
-                    data.currentState.debt.severity === "moderate" ? "bg-amber-100 text-amber-700" :
-                    "bg-surface-container text-on-surface-variant"
-                  }`}>
-                    {data.currentState.debt.severity}
-                  </span>
-                </div>
-                <div>
-                  <div className="font-display text-4xl font-bold text-black tracking-tight">
-                    {data.currentState.debt.cumulativeDebtHours}<span className="text-xl text-on-surface-variant font-normal ml-0.5">hrs</span>
-                  </div>
-                  <div className="text-sm text-on-surface-variant mt-1">Decay-weighted deficit over the last 14 nights</div>
-                  <div className="mt-3 pt-3 border-t border-outline-variant/50 flex justify-end">
-                    <span className="text-xs font-semibold text-on-surface-variant group-hover:text-on-surface transition-colors">
-                      View history →
+              {/* Sleep Debt — link to detail page. The "high" badge stays red (warning). */}
+              <Link href="/dashboard/sleep/debt" className="group block">
+                <StatCard
+                  tone="sleep"
+                  eyebrow="Sleep debt"
+                  className="h-full"
+                  topRight={
+                    <span className={`shrink-0 rounded-full px-2.5 py-[3px] text-xs font-medium ${
+                      data.currentState.debt.severity === "high"     ? "bg-red-100 text-red-700" :
+                      data.currentState.debt.severity === "moderate" ? "bg-amber-100 text-amber-700" :
+                      "bg-white text-sleep-ink"
+                    }`}>
+                      {data.currentState.debt.severity}
                     </span>
+                  }
+                >
+                  <div>
+                    <StatValue
+                      tone="sleep"
+                      size="tile"
+                      value={String(data.currentState.debt.cumulativeDebtHours)}
+                      unit="hrs"
+                      caption="Decay-weighted deficit over the last 14 nights"
+                    />
+                    <p className="mt-3 text-right text-sm font-medium text-sleep-muted transition-colors group-hover:text-sleep-ink">
+                      View history →
+                    </p>
                   </div>
-                </div>
+                </StatCard>
               </Link>
 
               {/* Circadian Rhythm */}
-              <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col justify-between hover:shadow-[0px_20px_40px_rgba(0,0,0,0.05)] transition-shadow">
-                <div className="flex justify-between items-start mb-4">
-                  <span className="text-sm font-medium text-on-surface-variant">Circadian Rhythm</span>
-                  <span className="px-2 py-0.5 bg-surface-container text-on-surface-variant font-semibold text-xs rounded-full">
-                    {data.currentState.variance?.status || "Stable"}
-                  </span>
-                </div>
-                <div>
-                  <div className="font-display text-4xl font-bold text-black tracking-tight">
-                    ±{data.currentState.variance?.standardDeviationMinutes || 0}<span className="text-xl text-on-surface-variant font-normal ml-0.5">m</span>
-                  </div>
-                  <div className="text-sm text-on-surface-variant mt-1">Bedtime variance over the last 14 nights</div>
-                </div>
-              </div>
+              <StatCard
+                tone="sleep"
+                eyebrow="Circadian rhythm"
+                topRight={<StatPill tone="sleep">{data.currentState.variance?.status || "Stable"}</StatPill>}
+              >
+                <StatValue
+                  tone="sleep"
+                  size="tile"
+                  value={`±${data.currentState.variance?.standardDeviationMinutes || 0}`}
+                  unit="m"
+                  caption="Bedtime variance over the last 14 nights"
+                />
+              </StatCard>
 
             </div>
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { fetchDebtSessions } from "@/app/actions/sync";
 import DebtChart from "./debt-chart";
+import { EYEBROW, EmptyStateCard, NeutralCard, StatCard, StatValue } from "../../components/stat-card";
 
 export default async function SleepDebtPage({
   searchParams,
@@ -28,7 +29,7 @@ export default async function SleepDebtPage({
   const severityClass =
     debtData?.currentSeverity === "high"     ? "bg-red-100 text-red-700" :
     debtData?.currentSeverity === "moderate" ? "bg-amber-100 text-amber-700" :
-    "bg-surface-container text-on-surface-variant";
+    "bg-white text-sleep-ink";
 
   return (
     <PageShell>
@@ -52,50 +53,48 @@ export default async function SleepDebtPage({
         </div>
 
         {debtData && (
-          <div className="flex items-baseline gap-3">
-            <span className="font-display text-4xl font-bold text-on-surface tracking-tight">
-              {debtData.currentDebtHours}
-              <span className="text-xl font-normal text-on-surface-variant ml-1">hrs</span>
-            </span>
-            <span className={`px-3 py-1 text-sm font-semibold rounded-full ${severityClass}`}>
-              {debtData.currentSeverity}
-            </span>
-          </div>
+          <StatCard
+            tone="sleep"
+            eyebrow="Current debt"
+            className="w-full md:w-72"
+            topRight={<span className={`shrink-0 rounded-full px-2.5 py-[3px] text-xs font-medium ${severityClass}`}>{debtData.currentSeverity}</span>}
+          >
+            <StatValue tone="sleep" size="tile" value={String(debtData.currentDebtHours)} unit="hrs" />
+          </StatCard>
         )}
       </div>
 
       {/* Chart card */}
-      <div className="bg-white border border-outline-variant rounded-[1.5rem] p-card-padding">
-        <div className="mb-6">
-          <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">Debt Timeline</h2>
-          <p className="text-sm text-on-surface-variant mt-1">
-            Line = decayed running debt. Bars = each night&apos;s surplus or deficit.
-          </p>
-        </div>
-
-        {!debtData || debtData.history.length === 0 ? (
-          <div className="flex items-center justify-center h-[320px] text-sm text-on-surface-variant">
-            No sleep data available.
+      {!debtData || debtData.history.length === 0 ? (
+        <EmptyStateCard eyebrow="Debt timeline" className="min-h-[320px]">
+          <p className="text-sm text-on-surface-variant">No sleep data available.</p>
+        </EmptyStateCard>
+      ) : (
+        <NeutralCard>
+          <div className="mb-6">
+            <h2 className={`${EYEBROW} text-on-surface-variant`}>Debt timeline</h2>
+            <p className="mt-1.5 text-sm text-on-surface-variant">
+              Line = decayed running debt. Bars = each night&apos;s surplus or deficit.
+            </p>
           </div>
-        ) : (
           <Suspense
             fallback={
-              <div className="flex items-center justify-center h-[320px] text-sm text-on-surface-variant">
+              <div className="flex h-[320px] items-center justify-center text-sm text-on-surface-variant">
                 Loading chart…
               </div>
             }
           >
             <DebtChart history={debtData.history} />
           </Suspense>
-        )}
-      </div>
+        </NeutralCard>
+      )}
 
       {/* Methodology note */}
-      <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-4 text-xs text-on-surface-variant space-y-1 max-w-2xl">
+      <NeutralCard className="max-w-2xl space-y-1 text-sm text-on-surface-variant">
         <p><strong className="text-on-surface">How debt is calculated:</strong></p>
         <p>Each night&apos;s deficit (target − actual) or surplus is weighted by 0.5<sup>(age / 4 days)</sup>. A 4-day-old night contributes half as much pressure as last night. Surplus nights recover debt at 50% efficiency — you can&apos;t fully &quot;bank&quot; sleep.</p>
         <p>Severity: &lt; 5 hrs = optimal · 5–10 hrs = moderate · &gt; 10 hrs = high.</p>
-      </div>
+      </NeutralCard>
 
     </PageShell>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useId, type ReactNode } from "react";
+import { EYEBROW } from "./stat-card";
 
 interface ExpandableCardProps {
   title: string;
@@ -31,36 +32,34 @@ export default function ExpandableCard({
 
   return (
     <div
-      className={`bg-white border border-outline-variant rounded-[1.5rem] p-card-padding${className ? ` ${className}` : ""}`}
+      className={`rounded-card border border-hairline bg-white p-8${className ? ` ${className}` : ""}`}
     >
-      <div className="flex items-start justify-between mb-4">
-        <h2 className="font-display text-xl font-bold text-on-surface tracking-tight">
-          {title}
-        </h2>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <h2 className={`${EYEBROW} text-on-surface-variant`}>{title}</h2>
         {headerRight}
       </div>
 
       {/* Overview — always visible */}
       <div>{overview}</div>
 
-      {/* Toggle — matches Sleep Score card expand button */}
+      {/* Toggle */}
       <div className="mt-4">
         <button
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-controls={detailId}
-          className="text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1"
+          className="text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1"
         >
           {expandLabel != null && <span>{expandLabel}</span>}
           <span>{open ? "▴" : "▾"}</span>
         </button>
       </div>
 
-      {/* Detail — divider matches Sleep Score card section separator */}
+      {/* Detail */}
       {open && (
         <div
           id={detailId}
-          className="mt-4 pt-4 border-t border-outline-variant/50 animate-in fade-in duration-200"
+          className="mt-4 pt-4 border-t border-hairline animate-in fade-in duration-200"
         >
           {children}
         </div>

@@ -17,6 +17,7 @@ import {
 import { localToday } from "@/lib/dates";
 import { formatDateMMDD } from "@/lib/format";
 import { selectTrendTicks } from "@/lib/charts/trend-ticks";
+import { EYEBROW, NeutralCard } from "./stat-card";
 
 // ---------------------------------------------------------------------------
 
@@ -74,11 +75,11 @@ export default function SleepCharts({ data }: { data: ScorePoint[] }) {
   const [domainMin, domainMax]  = fittedDomain(stats.min, stats.max);
 
   return (
-    <div className="bg-surface-container-lowest border border-outline-variant rounded-[1.5rem] p-card-padding flex flex-col">
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+    <NeutralCard className="flex flex-col">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="font-display text-xl font-semibold text-black tracking-tight">Sleep Score Trend</h3>
-          <p className="text-xs text-on-surface-variant mt-0.5">
+          <h2 className={`${EYEBROW} text-on-surface-variant`}>Sleep score trend</h2>
+          <p className="mt-1.5 text-sm text-on-surface-variant">
             Composite of volume, continuity, disruption &amp; cardiac recovery — as of today
           </p>
         </div>
@@ -145,6 +146,6 @@ export default function SleepCharts({ data }: { data: ScorePoint[] }) {
           </AreaChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </NeutralCard>
   );
 }
