@@ -8,8 +8,11 @@ import {
   advanceCursor,
   deriveSyncedThrough,
   gapProgress,
+  MAX_RECOVERY_DAYS,
   pickNextUnit,
   planCatchUp,
+  parseRecoveryDays,
+  planRecoveryRange,
   splitRange,
 } from "@/lib/sync/catch-up";
 
@@ -185,6 +188,44 @@ function assertTiles(syncedThrough: string, today: string): void {
   assert.deepEqual(splitRange("2026-10-23", "2026-10-22"), []);
   assert.equal(splitRange("2026-10-01", "2026-10-03", 0).length, 3, "non-positive size still terminates");
   console.log("9 splitRange: " + chunks.map(fmt).join(" | "));
+}
+
+// 10 planRecoveryRange (/api/sync?days=N): today-N..today, tiled, <=7-day zone windows, DST-safe.
+{
+  const check = (today: string, n: number): void => {
+    const plan = planRecoveryRange(today, n);
+    const first = addDays(today, -n);
+    assert.equal(plan[0].from, first, `N=${n} starts today-N`);
+    assert.equal(plan[plan.length - 1].to, today, `N=${n} last chunk ends today`);
+    const seen = new Set<string>();
+    let expected = 0;
+    for (let i = 0; i < plan.length; i++) {
+      const c = plan[i];
+      assert.ok(c.days >= 1 && c.days <= CHUNK_DAYS);
+      if (i > 0) assert.equal(c.from, addDays(plan[i - 1].to, 1), `N=${n} contiguous`);
+      // zone windows inside the chunk: tile it exactly, each <= 7 days
+      const zw = splitRange(c.from, c.to, 7);
+      assert.ok(zw.every((w) => w.days >= 1 && w.days <= 7), "zone window <= 7 days");
+      assert.equal(zw[0].from, c.from);
+      assert.equal(zw[zw.length - 1].to, c.to);
+      for (let d = c.from; d <= c.to; d = addDays(d, 1)) { assert.ok(!seen.has(d), `${d} duplicated`); seen.add(d); }
+    }
+    for (let d = first; d <= today; d = addDays(d, 1)) { expected++; assert.ok(seen.has(d), `${d} missing`); }
+    assert.equal(seen.size, expected, `N=${n} covers exactly N+1 civil days`);
+    assert.equal(expected, n + 1);
+  };
+  for (const n of [1, 7, 8, 30, 90, MAX_RECOVERY_DAYS]) check("2026-10-26", n);
+  check("2026-10-27", 3);   // spans the 2026-10-25 clock change
+  check("2026-10-30", 14);
+  check("2026-04-02", 8);   // spans the 2026-03-29 clock change
+  check("2026-03-31", 90);
+  assert.deepEqual(planRecoveryRange("2026-10-26", 0), []);
+  assert.deepEqual(planRecoveryRange("2026-10-26", 1.5), []);
+  assert.deepEqual(planRecoveryRange("2026-10-26", -3), []);
+  assert.equal(parseRecoveryDays("3"), 3);
+  assert.equal(parseRecoveryDays("120"), 120);
+  for (const bad of ["121", "500", "0", "-1", "1.5", "abc", "", "3e1", " "]) assert.equal(parseRecoveryDays(bad), null, `days=${JSON.stringify(bad)} -> 400`);
+  console.log("10 planRecoveryRange: N=30 ->", planRecoveryRange("2026-10-26", 30).map(fmt).join(" | "));
 }
 
 console.log(`ALL CHECKS PASSED (TZ=${process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone})`);

@@ -23,6 +23,7 @@ import {
 } from "@/lib/sync/persist";
 import { buildActivitySummaries } from "@/lib/sync/activity-summaries";
 import { addDays, parseLocalDate } from "@/lib/dates";
+import { splitRange } from "@/lib/sync/catch-up";
 
 /**
  * Days per zone request window. Zone data is ~1 point per worn minute and the
@@ -52,9 +53,7 @@ function zonePointCivilDate(pt: GoogleZoneMinutePoint): string | null {
  */
 async function fetchZonesInWindows(userId: string, from: string, to: string): Promise<GoogleZoneMinutePoint[]> {
   const points: GoogleZoneMinutePoint[] = [];
-  for (let start = from; start <= to; start = addDays(start, ZONE_WINDOW_DAYS)) {
-    const last = addDays(start, ZONE_WINDOW_DAYS - 1);
-    const end = last < to ? last : to;
+  for (const { from: start, to: end } of splitRange(from, to, ZONE_WINDOW_DAYS)) {
     const fetched = await fetchGoogleZoneRecords(
       userId,
       localMidnightISO(addDays(start, -1)),
@@ -68,11 +67,22 @@ async function fetchZonesInWindows(userId: string, from: string, to: string): Pr
   return points;
 }
 
+/** Rows handed to each upsert by one syncDateRange call (inserts and updates alike). */
+export interface RangeRowCounts {
+  sleepSessions: number;
+  sleepStages: number;
+  heartSummaries: number;
+  /** daily_activity_summaries rows written with zone minutes. */
+  activityZoneDays: number;
+  /** daily_activity_summaries rows written with steps. */
+  stepDays: number;
+}
+
 /**
  * Sleep is filtered on session END, so the night that starts on `to` ends after
  * this range and is fetched by the next unit (which always starts at to + 1).
  */
-export async function syncDateRange(userId: string, from: string, to: string): Promise<void> {
+export async function syncDateRange(userId: string, from: string, to: string): Promise<RangeRowCounts> {
   // Whole local days, so per-day rows (zones replace, steps replace) are never
   // written from a partial day.
   const startISO = localMidnightISO(from);
@@ -97,11 +107,20 @@ export async function syncDateRange(userId: string, from: string, to: string): P
     Awaited<ReturnType<typeof fetchGoogleDailySteps>>,
   ];
 
-  await persistHealthRecords(
-    userId,
-    normalizeGoogleSleepSessions(userId, sleep),
-    normalizeHeartData(userId, heart.heartRatePoints, heart.hrvPoints),
-  );
-  await persistActivitySummaries(userId, buildActivitySummaries(zones));
-  await persistDailySteps(userId, normalizeDailySteps(steps));
+  const normalizedSleep = normalizeGoogleSleepSessions(userId, sleep);
+  const heartRecords = normalizeHeartData(userId, heart.heartRatePoints, heart.hrvPoints);
+  const activitySummaries = buildActivitySummaries(zones);
+  const dailySteps = normalizeDailySteps(steps);
+
+  await persistHealthRecords(userId, normalizedSleep, heartRecords);
+  await persistActivitySummaries(userId, activitySummaries);
+  await persistDailySteps(userId, dailySteps);
+
+  return {
+    sleepSessions: normalizedSleep.length,
+    sleepStages: normalizedSleep.reduce((n, s) => n + s.stages.length, 0),
+    heartSummaries: heartRecords.length,
+    activityZoneDays: activitySummaries.length,
+    stepDays: dailySteps.length,
+  };
 }

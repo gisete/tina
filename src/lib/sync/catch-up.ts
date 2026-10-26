@@ -51,6 +51,30 @@ export function splitRange(from: string, to: string, chunkDays: number = CHUNK_D
   return chunks;
 }
 
+/** Largest N accepted by the manual recovery range (/api/sync?days=N). */
+export const MAX_RECOVERY_DAYS = 120;
+
+/**
+ * Parses the ?days query value: an integer from 1 to MAX_RECOVERY_DAYS, else
+ * null (the route answers 400). No clamping: a request over the cap is refused.
+ */
+export function parseRecoveryDays(raw: string): number | null {
+  if (!/^\d+$/.test(raw.trim())) return null;
+  const days = Number(raw);
+  return days >= 1 && days <= MAX_RECOVERY_DAYS ? days : null;
+}
+
+/**
+ * Chunks for a manual recovery range: the N civil days before today plus today
+ * (today − N .. today). Same span the legacy mid-day window reached back, but
+ * starting at the first day's local midnight so no day is partial. Empty for a
+ * non-integer or non-positive N.
+ */
+export function planRecoveryRange(today: string, days: number): DateRange[] {
+  if (!Number.isInteger(days) || days < 1) return [];
+  return splitRange(addDays(today, -days), today);
+}
+
 /**
  * Builds the catch-up plan. The gap ends the day before the recent window
  * starts so chunks and the recent window never overlap and leave no hole.

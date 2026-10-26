@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { syncFromGoogle, readDashboardData } from "@/app/actions/sync";
+import { MAX_RECOVERY_DAYS, parseRecoveryDays } from "@/lib/sync/catch-up";
 import { runRangeSync, type RangeSyncResult } from "@/lib/sync/range-sync";
 import { auth } from "@/auth";
-
-/** Upper bound for ?days=N so one request can't run an unbounded number of Google chunks. */
-const MAX_RANGE_DAYS = 365;
 
 export async function GET(request: Request) {
   try {
@@ -18,15 +16,16 @@ export async function GET(request: Request) {
     }
 
     // ?days is a recovery-only escape hatch for DB wipes / first-time backfill:
-    // today-N..today, chunked, with per-chunk results in the response. Without
-    // it, one forced recent-window step (what the Sync button does).
+    // today-N..today, chunked, with per-chunk date range and rows written per
+    // table in the response. It never touches synced_through or last_synced_at.
+    // Without it, one forced recent-window step (what the Sync button does).
     const { searchParams } = new URL(request.url);
     const rawDays = searchParams.get("days");
     let rangeSync: RangeSyncResult | undefined;
     if (rawDays !== null) {
-      const days = Number(rawDays);
-      if (!Number.isInteger(days) || days < 1 || days > MAX_RANGE_DAYS) {
-        return NextResponse.json({ error: `days must be an integer from 1 to ${MAX_RANGE_DAYS}.` }, { status: 400 });
+      const days = parseRecoveryDays(rawDays);
+      if (days === null) {
+        return NextResponse.json({ error: `days must be an integer from 1 to ${MAX_RECOVERY_DAYS}.` }, { status: 400 });
       }
       rangeSync = await runRangeSync(session.user.id, days);
       revalidatePath("/dashboard");
@@ -35,7 +34,10 @@ export async function GET(request: Request) {
       revalidatePath("/dashboard/today");
       if (!rangeSync.ok) {
         const busy = rangeSync.chunks.some((c) => c.status === "busy");
-        const status = rangeSync.authRequired ? 401 : busy ? 409 : 502;
+        if (rangeSync.authRequired) {
+          return NextResponse.json({ kind: "auth_required", error: "Google sign-in expired. Please reconnect.", sync: rangeSync }, { status: 401 });
+        }
+        const status = busy ? 409 : 502;
         return NextResponse.json({ error: "Sync did not complete (earlier chunks may have been saved); see sync.chunks.", sync: rangeSync }, { status });
       }
     } else {
