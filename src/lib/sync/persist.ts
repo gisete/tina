@@ -43,6 +43,9 @@ export async function persistHealthRecords(
             totalSleepMs: sql`EXCLUDED.total_sleep_ms`,
             efficiencyScore: sql`EXCLUDED.efficiency_score`,
             timelineRaw: sql`EXCLUDED.timeline_raw`,
+            // COALESCE: a stored offset is never overwritten by a null from a payload lacking it.
+            startUtcOffsetSeconds: sql`COALESCE(EXCLUDED.start_utc_offset_seconds, ${sleepSessions.startUtcOffsetSeconds})`,
+            endUtcOffsetSeconds: sql`COALESCE(EXCLUDED.end_utc_offset_seconds, ${sleepSessions.endUtcOffsetSeconds})`,
             source: sql`EXCLUDED.source`,
           },
         })

@@ -25,6 +25,9 @@ export const sleepSessions = pgTable("sleep_sessions", {
   efficiencyScore: real("efficiency_score").notNull(),
   continuityScore: integer("continuity_score"),
   timelineRaw: jsonb("timeline_raw"),
+  /** UTC offset (seconds) of the user's local zone at session start/end, from the API; null = unknown. */
+  startUtcOffsetSeconds: integer("start_utc_offset_seconds"),
+  endUtcOffsetSeconds: integer("end_utc_offset_seconds"),
   source: text("source").default("google_health").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [

@@ -68,6 +68,8 @@ export interface GoogleHealthSessionBlock {
       endTime: string;
       /** UTC offset of the user's local timezone at session start, e.g. "3600s" or "-18000s". */
       startUtcOffset?: string;
+      /** UTC offset of the user's local timezone at session end, same format. */
+      endUtcOffset?: string;
     };
     stages?: GoogleHealthStageBlock[];
     summary?: {
@@ -118,6 +120,22 @@ export function nightOf(utcMs: number, offsetSeconds: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/** Largest real-world UTC offset is +14h; anything beyond ±18h is corrupt input. */
+const MAX_UTC_OFFSET_SECONDS = 18 * 3600;
+
+/**
+ * Parses the API's UTC offset duration string ("3600s", "-18000s", "0s") into
+ * whole seconds. Missing, malformed or implausible input gives null — never 0,
+ * so "unknown" stays distinguishable from "UTC".
+ */
+export function parseUtcOffsetSeconds(raw: unknown): number | null {
+  if (typeof raw !== "string") return null;
+  const m = /^([+-]?\d+)s$/.exec(raw.trim());
+  if (!m) return null;
+  const seconds = parseInt(m[1], 10);
+  return Math.abs(seconds) <= MAX_UTC_OFFSET_SECONDS ? seconds : null;
+}
+
 /** Stage values we map 1:1 into the sleep_stages enum. */
 const KNOWN_STAGE_TYPES = new Set(["deep", "light", "rem", "awake"]);
 
@@ -152,10 +170,10 @@ export function normalizeGoogleSleepSession(userId: string, sessionBlock: Google
   // interval.startUtcOffset (e.g. "3600s") converts the UTC timestamp to the
   // user's local timezone; sessions starting before NIGHT_BOUNDARY_HOUR local
   // (e.g. 01:06) belong to the prior evening's night, not the early-morning day.
-  const offsetSeconds = sleepData.interval.startUtcOffset
-    ? parseInt(sleepData.interval.startUtcOffset, 10)
-    : 0;
-  const sleepDate = nightOf(startTime.getTime(), offsetSeconds);
+  // The offsets are persisted too, so sleepDate stays recomputable from stored inputs.
+  const startUtcOffsetSeconds = parseUtcOffsetSeconds(sleepData.interval.startUtcOffset);
+  const endUtcOffsetSeconds = parseUtcOffsetSeconds(sleepData.interval.endUtcOffset);
+  const sleepDate = nightOf(startTime.getTime(), startUtcOffsetSeconds ?? 0);
   const sessionId = crypto.randomUUID();
 
   const session = {
@@ -166,6 +184,8 @@ export function normalizeGoogleSleepSession(userId: string, sessionBlock: Google
     endTime,
     totalSleepMs,
     efficiencyScore: Math.min(1, Math.max(0, efficiencyScore)),
+    startUtcOffsetSeconds,
+    endUtcOffsetSeconds,
     source: "google_health",
   };
 
