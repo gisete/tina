@@ -38,7 +38,9 @@ export function buildNightHeartLayout(
   samples: NightHrSample[],
   sessionStart: string,
   sessionEnd: string,
-  baselineRhr: number | null
+  baselineRhr: number | null,
+  startOffsetSeconds?: number | null,
+  endOffsetSeconds?: number | null,
 ): NightHeartLayout | null {
   if (samples.length < 2) return null;
 
@@ -89,7 +91,7 @@ export function buildNightHeartLayout(
   return {
     points,
     yTicks,
-    ticks: buildTimeTicks(startTs, endTs),
+    ticks: buildTimeTicks(startTs, endTs, startOffsetSeconds, endOffsetSeconds),
     baseline: baselineRhr !== null ? { bpm: baselineRhr, yFrac: yFrac(baselineRhr) } : null,
     timeBelowBaselinePct,
     minBpm,

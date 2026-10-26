@@ -99,9 +99,9 @@ export default async function HeartRateDetailPage({
                 {data.lastNight ? (
                   <>
                     {nightLabel && <>{nightLabel}<span className="mx-2 text-outline-variant">·</span></>}
-                    {formatClockTime(data.lastNight.startTime)}
+                    {formatClockTime(data.lastNight.startTime, data.lastNight.startUtcOffsetSeconds)}
                     <span className="mx-2 text-outline-variant">–</span>
-                    {formatClockTime(data.lastNight.endTime)}
+                    {formatClockTime(data.lastNight.endTime, data.lastNight.endUtcOffsetSeconds)}
                   </>
                 ) : (
                   missingNight
@@ -143,6 +143,8 @@ export default async function HeartRateDetailPage({
                 series={data.nightHrSeries}
                 sessionStart={data.lastNight.startTime}
                 sessionEnd={data.lastNight.endTime}
+                startUtcOffsetSeconds={data.lastNight.startUtcOffsetSeconds}
+                endUtcOffsetSeconds={data.lastNight.endUtcOffsetSeconds}
                 baselineRhr={data.nightHeart?.baselineRhr ?? data.heart?.overallBaseline?.avgRhr ?? null}
                 timeline={data.lastNight.timeline ?? undefined}
               />

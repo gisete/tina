@@ -9,12 +9,16 @@ import {
 import { buildStageGradientStops } from "@/lib/charts/night-heart-stage";
 import { STAGE_COLORS, UNSTAGED_COLOR } from "@/lib/charts/stage-colors";
 import type { SleepStageInterval } from "@/lib/analytics/sleep/types";
+import { offsetForInstant } from "@/lib/dates";
 import { formatClockTime } from "@/lib/format";
 
 interface NightHeartChartProps {
   series: NightHrSample[];
   sessionStart: string; // ISO 8601
   sessionEnd: string;   // ISO 8601
+  /** UTC offsets (seconds) stored for the session; null/absent = server-local clock. */
+  startUtcOffsetSeconds?: number | null;
+  endUtcOffsetSeconds?: number | null;
   /** Usual resting heart rate — drawn as the dashed reference line. */
   baselineRhr: number | null;
   /** Stage timeline for HR coloring. When omitted, the line renders in a single neutral color. */
@@ -41,13 +45,17 @@ export default function NightHeartChart({
   series,
   sessionStart,
   sessionEnd,
+  startUtcOffsetSeconds = null,
+  endUtcOffsetSeconds = null,
   baselineRhr,
   timeline,
 }: NightHeartChartProps) {
   const plotRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<NightHeartPoint | null>(null);
 
-  const layout = buildNightHeartLayout(series, sessionStart, sessionEnd, baselineRhr);
+  const layout = buildNightHeartLayout(
+    series, sessionStart, sessionEnd, baselineRhr, startUtcOffsetSeconds, endUtcOffsetSeconds,
+  );
 
   // Build gradient stops from shared stage-assignment logic.
   // Empty array → no timeline or no matches → fallback to single color below.
@@ -249,7 +257,16 @@ export default function NightHeartChart({
                 }}
               >
                 <span style={{ color: hoverColor, fontWeight: 700 }}>{hover.bpm} bpm</span>
-                <span style={{ color: "#e5e2d9", marginLeft: 8 }}>{formatClockTime(hover.timestamp)}</span>
+                <span style={{ color: "#e5e2d9", marginLeft: 8 }}>{formatClockTime(
+                  hover.timestamp,
+                  offsetForInstant(
+                    hover.timestamp,
+                    new Date(sessionStart).getTime(),
+                    new Date(sessionEnd).getTime(),
+                    startUtcOffsetSeconds,
+                    endUtcOffsetSeconds,
+                  ),
+                )}</span>
               </div>
             </>
           )}
@@ -270,7 +287,7 @@ export default function NightHeartChart({
                 : { left: `${tick.xPct}%`, transform: "translateX(-50%)" }
             }
           >
-            {formatClockTime(tick.timestamp)}
+            {formatClockTime(tick.timestamp, tick.offsetSeconds)}
           </span>
         ))}
       </div>

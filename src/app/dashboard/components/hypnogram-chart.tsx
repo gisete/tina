@@ -106,7 +106,7 @@ export default function HypnogramChart({
     );
   }
 
-  const layout = buildHypnogramLayout(timeline, sessionStart, sessionEnd, restlessEvents, startUtcOffsetSeconds);
+  const layout = buildHypnogramLayout(timeline, sessionStart, sessionEnd, restlessEvents, startUtcOffsetSeconds, endUtcOffsetSeconds);
   const startMs = new Date(sessionStart).getTime();
   const endMs = new Date(sessionEnd).getTime();
   const clock = (t: number | string): string =>
@@ -306,7 +306,7 @@ export default function HypnogramChart({
               fontFamily="var(--font-sans)"
               textAnchor={tick.anchor}
             >
-              {clock(tick.timestamp)}
+              {formatClockTime(tick.timestamp, tick.offsetSeconds)}
             </text>
           ))}
         </svg>
