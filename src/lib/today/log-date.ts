@@ -23,11 +23,8 @@ export function validateLogDate(raw: unknown, today: string): Validated<string> 
 
 /**
  * True when the sync clock is missing or older than `staleAfterHours`.
- * Mirrors the staleness rule loadPageData applies on the sleep page.
+ * The sync step passes STALE_AFTER_HOURS (src/lib/sync/catch-up.ts).
  */
 export function isSyncStale(lastSyncedAtMs: number | null, nowMs: number, staleAfterHours: number): boolean {
   return lastSyncedAtMs === null || nowMs - lastSyncedAtMs > staleAfterHours * 3_600_000;
 }
-
-/** Hours before the sync clock counts as stale — the single source for the catch-up staleness rule. */
-export const TODAY_STALE_AFTER_HOURS = 6;

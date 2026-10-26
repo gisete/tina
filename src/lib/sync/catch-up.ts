@@ -9,6 +9,9 @@ import { addDays, diffDays } from "@/lib/dates";
  */
 export const RECENT_WINDOW_DAYS = 3;
 
+/** Hours before last_synced_at counts as stale — the single source for the recent-window staleness rule. */
+export const STALE_AFTER_HOURS = 6;
+
 /** Maximum civil days in one gap-fill chunk. */
 export const CHUNK_DAYS = 14;
 

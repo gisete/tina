@@ -4,8 +4,8 @@
 
 import { localToday } from "@/lib/dates";
 import { GoogleAuthError } from "@/lib/google/errors";
-import { isSyncStale, TODAY_STALE_AFTER_HOURS } from "@/lib/today";
-import { advanceCursor, gapProgress, pickNextUnit, planCatchUp } from "@/lib/sync/catch-up";
+import { isSyncStale } from "@/lib/today";
+import { advanceCursor, gapProgress, pickNextUnit, planCatchUp, STALE_AFTER_HOURS } from "@/lib/sync/catch-up";
 import { ensureLatestNightSamples } from "@/lib/sync/night-samples";
 import { syncDateRange } from "@/lib/sync/range";
 import {
@@ -33,7 +33,7 @@ export async function runSyncStep(userId: string, opts: SyncStepRequest = {}): P
     const unit = pickNextUnit(plan, {
       syncedThrough: state.syncedThrough,
       today,
-      stale: isSyncStale(state.lastSyncedAtMs, Date.now(), TODAY_STALE_AFTER_HOURS),
+      stale: isSyncStale(state.lastSyncedAtMs, Date.now(), STALE_AFTER_HOURS),
       force: opts.force === true,
     });
     if (!unit) return { kind: "idle" };
