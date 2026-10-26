@@ -1,5 +1,8 @@
 import type { AnalyticSession } from "./types";
 
+/** Most recent main sessions the variance is computed over (same convention as the debt window). */
+export const CIRCADIAN_WINDOW_NIGHTS = 14;
+
 /** Fewest nights a bedtime variance is shown for; below it the UI shows "—". */
 export const MIN_CIRCADIAN_NIGHTS = 5;
 
@@ -7,15 +10,20 @@ export interface CircadianVariance {
   averageBedtimeMinutesFromMidnight: number;
   standardDeviationMinutes: number;
   status: "stable" | "variable" | "erratic";
-  /** Sessions the variance was computed from. */
+  /** Sessions the variance was computed from (at most CIRCADIAN_WINDOW_NIGHTS). */
   nights: number;
 }
 
 /**
  * Measures the variability of bedtime onset (Circadian Rhythm consistency).
  * Returns the average bedtime deviation in minutes. High deviation = higher "Social Jetlag".
+ * Only the CIRCADIAN_WINDOW_NIGHTS most recent sessions count, so it describes now.
  */
-export function calculateCircadianVariance(sessions: AnalyticSession[]): CircadianVariance {
+export function calculateCircadianVariance(allSessions: AnalyticSession[]): CircadianVariance {
+  const sessions = [...allSessions]
+    .sort((a, b) => a.sleepDate.localeCompare(b.sleepDate))
+    .slice(-CIRCADIAN_WINDOW_NIGHTS);
+
   if (sessions.length < 2) {
     return { averageBedtimeMinutesFromMidnight: 0, standardDeviationMinutes: 0, status: "stable", nights: sessions.length };
   }

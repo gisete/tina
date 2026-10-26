@@ -1,7 +1,7 @@
 // Fixtures for the honest state cards (circadian nights, debt window span).
 // Run: npx tsx scripts/state-card-check.ts
 import assert from "node:assert/strict";
-import { MIN_CIRCADIAN_NIGHTS, calculateCircadianVariance, calculateSleepDebt } from "@/lib/analytics/sleep";
+import { CIRCADIAN_WINDOW_NIGHTS, MIN_CIRCADIAN_NIGHTS, calculateCircadianVariance, calculateSleepDebt } from "@/lib/analytics/sleep";
 import { formatDebtBasis } from "@/lib/format";
 import type { AnalyticSession } from "@/lib/analytics/sleep";
 
@@ -29,6 +29,15 @@ const day = (i: number): string => `2026-10-${String(i + 1).padStart(2, "0")}`;
   assert.equal(five.standardDeviationMinutes, 0);
   const spread = calculateCircadianVariance([session(day(0), 22), session(day(1), 0)]);
   assert.equal(spread.standardDeviationMinutes, 60);
+
+  // Window: a longer set uses only the latest 14 (order of input does not matter)
+  const long = Array.from({ length: 20 }, (_, i) => session(`2026-09-${String(i + 1).padStart(2, "0")}`, i < 6 ? 15 : 23));
+  const w = calculateCircadianVariance([...long].reverse());
+  assert.equal(CIRCADIAN_WINDOW_NIGHTS, 14);
+  assert.equal(w.nights, 14);
+  assert.equal(w.standardDeviationMinutes, 0, "the six old 15:00 bedtimes fall outside the window");
+  assert.equal(calculateCircadianVariance(long.slice(0, 14)).standardDeviationMinutes > 0, true);
+  assert.equal(calculateCircadianVariance(long.slice(0, 4)).nights < MIN_CIRCADIAN_NIGHTS, true);
 }
 
 // Debt window: counts and span, debt math untouched

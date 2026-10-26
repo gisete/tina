@@ -332,7 +332,7 @@ export default async function SleepPage({
                     size="tile"
                     value={`±${circadian.standardDeviationMinutes}`}
                     unit="m"
-                    caption={`Bedtime variance over ${circadian.nights} recorded nights`}
+                    caption={`Bedtime variance over the last ${circadian.nights} recorded nights`}
                   />
                 </StatCard>
               ) : (
