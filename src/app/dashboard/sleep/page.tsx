@@ -140,7 +140,7 @@ export default async function SleepPage({
                 <p className={`${EYEBROW} text-on-surface-variant`}>Selected night</p>
                 <p className="mt-1.5 text-base text-secondary">
                   {formatNightRange(missingNight ? missingNight.expectedNightOf : (nightOf ?? targetDate))}
-                  {!missingNight && night && <> · {formatClockTime(night.startTime)} – {formatClockTime(night.endTime)}</>}
+                  {!missingNight && night && <> · {formatClockTime(night.startTime, night.startUtcOffsetSeconds)} – {formatClockTime(night.endTime, night.endUtcOffsetSeconds)}</>}
                 </p>
               </div>
               <DateNavigator />
@@ -157,7 +157,7 @@ export default async function SleepPage({
               <div className="pt-2">
                 <p className={`${EYEBROW} text-on-surface-variant`}>Most recent recorded night</p>
                 <p className="mt-1.5 text-base text-secondary">
-                  {formatNightRange(fallbackNightOf)} · {formatClockTime(night.startTime)} – {formatClockTime(night.endTime)}
+                  {formatNightRange(fallbackNightOf)} · {formatClockTime(night.startTime, night.startUtcOffsetSeconds)} – {formatClockTime(night.endTime, night.endUtcOffsetSeconds)}
                 </p>
               </div>
             )}
@@ -248,13 +248,15 @@ export default async function SleepPage({
                   <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
                     <h2 className={`${EYEBROW} text-on-surface-variant`}>Sleep timeline</h2>
                     <p className="text-sm text-on-surface-variant">
-                      {formatClockTime(night.startTime)} – {formatClockTime(night.endTime)}
+                      {formatClockTime(night.startTime, night.startUtcOffsetSeconds)} – {formatClockTime(night.endTime, night.endUtcOffsetSeconds)}
                     </p>
                   </div>
                   <HypnogramChart
                     timeline={night.timeline}
                     sessionStart={night.startTime}
                     sessionEnd={night.endTime}
+                    startUtcOffsetSeconds={night.startUtcOffsetSeconds}
+                    endUtcOffsetSeconds={night.endUtcOffsetSeconds}
                     restlessEvents={night.restlessness.restlessEvents}
                     restlessnessSource={night.restlessness.source}
                     bare

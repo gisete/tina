@@ -51,3 +51,40 @@ export function diffDays(from: string, to: string): number {
   const [ty, tm, td] = to.split("-").map(Number);
   return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86_400_000);
 }
+
+/**
+ * Minutes since local midnight (0–1439) for an instant. With a stored UTC
+ * offset (seconds) the clock is the one the person was living in at that
+ * moment; with null/undefined it falls back to the server-local zone, exactly
+ * as `getHours()/getMinutes()` always did.
+ */
+export function localClockMinutes(t: number | string | Date, offsetSeconds?: number | null): number {
+  const d = new Date(t);
+  if (offsetSeconds === null || offsetSeconds === undefined) {
+    return d.getHours() * 60 + d.getMinutes();
+  }
+  const shifted = new Date(d.getTime() + offsetSeconds * 1000);
+  return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
+}
+
+/**
+ * The offset to use for an instant inside a session, given the offsets stored
+ * at its start and end. They are equal except across a DST change or zone
+ * crossing mid-session; the exact transition instant isn't stored, so an
+ * interior instant takes the offset of whichever end it is nearer to.
+ * Null when the relevant offset is unknown (callers then fall back to the
+ * server-local zone).
+ */
+export function offsetForInstant(
+  tMs: number,
+  startMs: number,
+  endMs: number,
+  startOffsetSeconds: number | null | undefined,
+  endOffsetSeconds: number | null | undefined,
+): number | null {
+  const start = startOffsetSeconds ?? null;
+  const end = endOffsetSeconds ?? null;
+  if (start === end) return start;
+  if (start === null || end === null) return start ?? end;
+  return tMs - startMs <= endMs - tMs ? start : end;
+}

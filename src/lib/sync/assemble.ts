@@ -31,6 +31,8 @@ export interface SleepSessionRow {
   endTime: Date;
   totalSleepMs: number;
   efficiencyScore: number;
+  startUtcOffsetSeconds?: number | null;
+  endUtcOffsetSeconds?: number | null;
   stages: Array<{
     stageType: SleepStageType;
     startTime: Date;
@@ -75,6 +77,8 @@ export function assembleDashboardData(
     endTime: s.endTime,
     totalSleepMs: s.totalSleepMs,
     efficiencyScore: s.efficiencyScore,
+    startUtcOffsetSeconds: s.startUtcOffsetSeconds ?? null,
+    endUtcOffsetSeconds: s.endUtcOffsetSeconds ?? null,
     // Preserve startTime/endTime per stage so getLastNightDetail can build
     // the chronological timeline without a second DB round-trip.
     stages: s.stages.map((st) => ({
@@ -117,6 +121,8 @@ export function assembleDashboardData(
           endTime: s.endTime,
           totalSleepMs: s.totalSleepMs,
           efficiencyScore: s.efficiencyScore,
+          startUtcOffsetSeconds: s.startUtcOffsetSeconds ?? null,
+          endUtcOffsetSeconds: s.endUtcOffsetSeconds ?? null,
           stages: s.stages.map((st) => ({
             stageType: st.stageType,
             startTime: st.startTime,

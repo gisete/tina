@@ -9,6 +9,7 @@ import {
   type HypnogramSegment,
   type RestlessMarker,
 } from "@/lib/charts/hypnogram-layout";
+import { offsetForInstant } from "@/lib/dates";
 import { formatClockTime, formatDurationMs } from "@/lib/format";
 
 // ---------------------------------------------------------------------------
@@ -20,6 +21,9 @@ interface HypnogramChartProps {
   timeline: SleepStageInterval[];
   sessionStart: string; // ISO 8601
   sessionEnd: string;   // ISO 8601
+  /** UTC offsets (seconds) stored for the session; null/absent = server-local clock. */
+  startUtcOffsetSeconds?: number | null;
+  endUtcOffsetSeconds?: number | null;
   /** Pre-computed restless stirs from assemble.ts (HR-derived or empty). */
   restlessEvents?: RestlessEvent[];
   /** How the restless events were detected — drives label and tooltip copy. */
@@ -85,6 +89,8 @@ export default function HypnogramChart({
   timeline,
   sessionStart,
   sessionEnd,
+  startUtcOffsetSeconds = null,
+  endUtcOffsetSeconds = null,
   restlessEvents = [],
   restlessnessSource = "none",
   bare = false,
@@ -100,7 +106,14 @@ export default function HypnogramChart({
     );
   }
 
-  const layout = buildHypnogramLayout(timeline, sessionStart, sessionEnd, restlessEvents);
+  const layout = buildHypnogramLayout(timeline, sessionStart, sessionEnd, restlessEvents, startUtcOffsetSeconds);
+  const startMs = new Date(sessionStart).getTime();
+  const endMs = new Date(sessionEnd).getTime();
+  const clock = (t: number | string): string =>
+    formatClockTime(
+      t,
+      offsetForInstant(new Date(t).getTime(), startMs, endMs, startUtcOffsetSeconds, endUtcOffsetSeconds),
+    );
 
   function showTooltip(e: React.MouseEvent, seg: HypnogramSegment) {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -111,7 +124,7 @@ export default function HypnogramChart({
       y: laneCenter(seg.laneIndex) - SEG_H / 2,
       title: interval.stageType,
       titleColor: STAGE_COLORS[interval.stageType],
-      rangeLabel: `${formatClockTime(interval.startTime)} – ${formatClockTime(interval.endTime)}`,
+      rangeLabel: `${clock(interval.startTime)} – ${clock(interval.endTime)}`,
       durationLabel: formatDurationMs(interval.durationMs),
     });
   }
@@ -124,12 +137,15 @@ export default function HypnogramChart({
       y: laneCenter(LANE_INDEX.awake) - SEG_H / 2,
       title: restlessnessSource === "hr-estimated" ? "Restless (est.)" : "Restless",
       titleColor: RESTLESS_TOOLTIP_COLOR,
-      rangeLabel: formatClockTime(m.startTimestamp),
+      rangeLabel: clock(m.startTimestamp),
       durationLabel: formatDurationMs(m.durationMs),
     });
   }
 
-  const sessionDate = new Date(sessionStart).toLocaleDateString("en-US", {
+  const sessionDate = new Date(
+    startUtcOffsetSeconds === null ? sessionStart : startMs + startUtcOffsetSeconds * 1000,
+  ).toLocaleDateString("en-US", {
+    ...(startUtcOffsetSeconds === null ? {} : { timeZone: "UTC" }),
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -290,7 +306,7 @@ export default function HypnogramChart({
               fontFamily="var(--font-sans)"
               textAnchor={tick.anchor}
             >
-              {formatClockTime(tick.timestamp)}
+              {clock(tick.timestamp)}
             </text>
           ))}
         </svg>

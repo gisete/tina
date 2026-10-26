@@ -70,7 +70,8 @@ export function buildHypnogramLayout(
   timeline: SleepStageInterval[],
   sessionStart: string,
   sessionEnd: string,
-  restlessEvents: RestlessEvent[] = []
+  restlessEvents: RestlessEvent[] = [],
+  offsetSeconds?: number | null,
 ): HypnogramLayout {
   const startTs = new Date(sessionStart).getTime();
   const endTs   = new Date(sessionEnd).getTime();
@@ -129,7 +130,7 @@ export function buildHypnogramLayout(
   return {
     segments,
     connectors,
-    ticks: buildTimeTicks(startTs, endTs),
+    ticks: buildTimeTicks(startTs, endTs, offsetSeconds),
     stageTotalsMs,
     restlessMarkers,
   };

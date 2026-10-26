@@ -2,8 +2,20 @@
 
 import { addDays, parseLocalDate } from "@/lib/dates";
 
-/** "11:35 PM" — accepts a Unix-ms timestamp, ISO string, or Date. */
-export function formatClockTime(t: number | string | Date): string {
+/**
+ * "11:35 PM" — accepts a Unix-ms timestamp, ISO string, or Date. With a stored
+ * UTC offset (seconds) the time is shown on that clock; null/undefined keeps
+ * the server-local zone.
+ */
+export function formatClockTime(t: number | string | Date, offsetSeconds?: number | null): string {
+  if (offsetSeconds !== null && offsetSeconds !== undefined) {
+    return new Date(new Date(t).getTime() + offsetSeconds * 1000).toLocaleTimeString("en-US", {
+      timeZone: "UTC",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
   return new Date(t).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",

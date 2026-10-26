@@ -17,6 +17,9 @@ export interface LastNightDetail {
   startTime: string;
   /** ISO 8601 — session end */
   endTime: string;
+  /** UTC offset (seconds) at session start/end; null = unknown (display falls back to server-local). */
+  startUtcOffsetSeconds: number | null;
+  endUtcOffsetSeconds: number | null;
   totalSleepMs: number;
   efficiencyScore: number;
   /**
@@ -135,6 +138,8 @@ export function getLastNightDetail(
     sleepDate: latest.sleepDate,
     startTime: toIso(latest.startTime),
     endTime: toIso(latest.endTime),
+    startUtcOffsetSeconds: latest.startUtcOffsetSeconds ?? null,
+    endUtcOffsetSeconds: latest.endUtcOffsetSeconds ?? null,
     totalSleepMs: latest.totalSleepMs,
     efficiencyScore: latest.efficiencyScore,
     holisticScore: calculateHolisticSleepScore(

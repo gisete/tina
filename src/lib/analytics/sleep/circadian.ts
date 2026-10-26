@@ -1,3 +1,4 @@
+import { localClockMinutes } from "@/lib/dates";
 import type { AnalyticSession } from "./types";
 
 /** Most recent main sessions the variance is computed over (same convention as the debt window). */
@@ -18,6 +19,11 @@ export interface CircadianVariance {
  * Measures the variability of bedtime onset (Circadian Rhythm consistency).
  * Returns the average bedtime deviation in minutes. High deviation = higher "Social Jetlag".
  * Only the CIRCADIAN_WINDOW_NIGHTS most recent sessions count, so it describes now.
+ *
+ * Design decision: bedtime is read on the clock the person was living in that
+ * night (the stored start UTC offset), so a timezone change by itself does not
+ * read as erratic bedtimes. Jet lag therefore does NOT show in this metric.
+ * Sessions with no stored offset use the server-local zone, as before.
  */
 export function calculateCircadianVariance(allSessions: AnalyticSession[]): CircadianVariance {
   const sessions = [...allSessions]
@@ -30,12 +36,8 @@ export function calculateCircadianVariance(allSessions: AnalyticSession[]): Circ
 
   // Convert each bedtime to minutes relative to midnight (-180 to 480 range to catch late nights vs early bedtimes)
   const bedtimeMinutes = sessions.map(session => {
-    const date = new Date(session.startTime);
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
-
     // If someone goes to bed at 23:30, it's -30 mins from midnight. If at 01:00, it's +60 mins.
-    const totalMins = hours * 60 + minutes;
+    const totalMins = localClockMinutes(session.startTime, session.startUtcOffsetSeconds);
     return totalMins > 12 * 60 ? totalMins - 24 * 60 : totalMins;
   });
 

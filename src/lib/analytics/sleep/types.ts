@@ -12,6 +12,9 @@ export interface AnalyticSession {
   endTime: Date;
   totalSleepMs: number;
   efficiencyScore: number;
+  /** UTC offset (seconds) at session start/end; null/absent = unknown (server-local zone). */
+  startUtcOffsetSeconds?: number | null;
+  endUtcOffsetSeconds?: number | null;
   stages?: AnalyticStage[];
 }
 
