@@ -122,4 +122,30 @@ console.log("All assertions passed.");
   assert(base.rhrSegments.length === 2 && base.rhrMarkers.length === 2, "segments and markers unchanged by bridges");
 }
 
+// ---------------------------------------------------------------------------
+// (d) Isolated present points (no present neighbour; window edges count as absent).
+// ---------------------------------------------------------------------------
+
+{
+  const N = null;
+  // RHR [1, N, 0.7, N, 0.2]: isolated at both window edges and in the middle; HRV complete: none.
+  const g = buildRecoveryBalanceGeometry([1, N, 0.7, N, 0.2], [0, 1, 0, -1, 0]);
+  assert(g.rhrIsolated.length === 3, `RHR isolated count 3, got ${g.rhrIsolated.length}`);
+  assert(near(g.rhrIsolated[0].xFrac, 0) && near(g.rhrIsolated[2].xFrac, 1), "isolated at both window edges");
+  assert(near(g.rhrIsolated[1].xFrac, 0.5) && near(g.rhrIsolated[1].yFrac, g.rhrMarkers[1].yFrac), "middle isolated point uses the marker's coordinates");
+  assert(g.hrvIsolated.length === 0, "HRV has no isolated points");
+
+  // None isolated: every present point has a present neighbour.
+  const none = buildRecoveryBalanceGeometry([1, 0.5, N, 0.2, 0.1], [N, 1, 0, N, N]);
+  assert(none.rhrIsolated.length === 0, "RHR runs of 2: none isolated");
+  assert(none.hrvIsolated.length === 0, "HRV run of 2: none isolated");
+
+  // Right edge after a gap (the live HRV 10/27 shape) and a lone-point series.
+  const edge = buildRecoveryBalanceGeometry([N, N, N, N], [0.3, 0.4, N, 0.9]);
+  assert(edge.hrvIsolated.length === 1 && near(edge.hrvIsolated[0].xFrac, 1), "right-edge isolated point after a gap");
+  assert(buildRecoveryBalanceGeometry([N, 2, N], [N, N, N]).rhrIsolated.length === 1, "single present point is isolated");
+  // Isolated points are a subset of the markers, and the bridge ends land on them.
+  assert(g.rhrIsolated.every((p) => g.rhrMarkers.some((m) => near(m.xFrac, p.xFrac) && near(m.yFrac, p.yFrac))), "isolated is a subset of markers");
+}
+
 console.log("recovery-balance fixtures OK");

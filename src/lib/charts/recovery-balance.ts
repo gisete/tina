@@ -2,7 +2,7 @@
 // Primitives in, JSON-safe primitives out — no React, no DOM imports.
 // Component maps the returned structs to SVG/DOM; no coordinate math lives there.
 
-import { buildGapModel } from "./data-gaps";
+import { buildGapModel, isolatedPresentIndices } from "./data-gaps";
 import { selectTrendTicks } from "./trend-ticks";
 
 export interface ZPoint {
@@ -58,6 +58,13 @@ export interface RecoveryBalanceGeometry {
    */
   rhrBridges: ZBridge[];
   hrvBridges: ZBridge[];
+  /**
+   * Present points of the RHR z-series with no present neighbour (window edges
+   * count as absent): the ones a line would draw as nothing. Used only by views
+   * that draw no per-point markers.
+   */
+  rhrIsolated: ZPoint[];
+  hrvIsolated: ZPoint[];
   /**
    * Data-point indices where BOTH series have no value (the only days that get
    * a baseline tick, since one metric alone being absent is already visible as
@@ -140,6 +147,9 @@ export function buildRecoveryBalanceGeometry(
       toIndex: b.toIndex,
     }));
 
+  const buildIsolated = (points: (number | null)[]): ZPoint[] =>
+    isolatedPresentIndices(points).map((i) => ({ xFrac: xFracs[i], yFrac: toYFrac(points[i] as number) }));
+
   const bothAbsentIndices = rhrPoints.flatMap((v, i) => (v === null && hrvPoints[i] === null ? [i] : []));
 
   return {
@@ -155,6 +165,8 @@ export function buildRecoveryBalanceGeometry(
     hrvMarkers: buildMarkers(hrvPoints),
     rhrBridges: buildBridges(rhrPoints),
     hrvBridges: buildBridges(hrvPoints),
+    rhrIsolated: buildIsolated(rhrPoints),
+    hrvIsolated: buildIsolated(hrvPoints),
     bothAbsentIndices,
   };
 }

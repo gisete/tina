@@ -133,6 +133,24 @@ function RingMarker({ m, color, index }: { m: ZPoint; color: string; index: numb
   );
 }
 
+// Anchor dot for a score with no solid-line neighbour. Used only where ring markers
+// are not drawn (the 90-day view); same HTML-div approach, 4px, series colour.
+function IsolatedDot({ m, color }: { m: ZPoint; color: string }) {
+  return (
+    <div
+      className="absolute rounded-full pointer-events-none"
+      style={{
+        left:            `${m.xFrac * 100}%`,
+        top:             m.yFrac * PLOT_H,
+        transform:       "translate(-50%, -50%)",
+        width:           4,
+        height:          4,
+        backgroundColor: color,
+      }}
+    />
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 interface Props {
@@ -447,6 +465,12 @@ export default function RecoveryBalanceChart({ summaries, lastSyncedAt = null }:
                 geo.hrvMarkers.map((m, i) => (
                   <RingMarker key={i} m={m} color={HRV_COLOR} index={i} />
                 ))}
+
+              {/* Windows without ring markers (90 days): mark isolated scores only. */}
+              {activeWindow === "90d" && rhrSeries.baselineReady &&
+                geo.rhrIsolated.map((m, i) => <IsolatedDot key={`ri${i}`} m={m} color={RHR_COLOR} />)}
+              {activeWindow === "90d" && hrvSeries.baselineReady &&
+                geo.hrvIsolated.map((m, i) => <IsolatedDot key={`hi${i}`} m={m} color={HRV_COLOR} />)}
 
               {/* Hover active dots */}
               {hoverX !== null && rhrSeries.baselineReady && hoverRhrZ !== null && (
