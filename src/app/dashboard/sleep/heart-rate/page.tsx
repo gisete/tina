@@ -182,7 +182,7 @@ export default async function HeartRateDetailPage({
 
           {/* ── HR trend — anchored to today, independent of ?date= ── */}
           {/* HrTrendChart renders its own card shell; no wrapper needed here */}
-          <HrTrendChart summaries={summaries} />
+          <HrTrendChart summaries={summaries} lastSyncedAt={data?.lastSyncedAt ?? null} />
 
           {/* ── Recovery vs Normal — z-scores against 90-day baseline ── */}
           <RecoveryBalanceChart summaries={summaries} />
