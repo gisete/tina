@@ -30,7 +30,31 @@ export interface GapModel {
   trailingAbsent: number[];
 }
 
-export function buildGapModel(points: readonly (number | null)[]): GapModel {
+export interface GapModelOptions {
+  /**
+   * An index to leave out of the absence lists entirely (no tick, no label, no
+   * count). Used for a slot that cannot have a value yet; see pendingTodayIndex.
+   */
+  ignoreIndex?: number | null;
+}
+
+/**
+ * The index of today's slot when a chart opts in with `todayIsPending` and that
+ * slot is the window's last point and is still null; otherwise null. A series
+ * keyed by night-of date has no value for today until tonight is over. A
+ * present value at today's slot changes nothing. Dates are civil strings.
+ */
+export function pendingTodayIndex(
+  dates: readonly string[],
+  points: readonly (number | null)[],
+  today: string,
+  todayIsPending: boolean,
+): number | null {
+  const last = points.length - 1;
+  return todayIsPending && last >= 0 && dates[last] === today && points[last] === null ? last : null;
+}
+
+export function buildGapModel(points: readonly (number | null)[], options: GapModelOptions = {}): GapModel {
   const presentIndices: number[] = [];
   const absentIndices: number[] = [];
   const bridges: GapBridge[] = [];
@@ -47,16 +71,31 @@ export function buildGapModel(points: readonly (number | null)[]): GapModel {
     lastPresent = i;
   });
 
+  const ignored = options.ignoreIndex ?? null;
+  const counted = ignored === null ? absentIndices : absentIndices.filter((i) => i !== ignored);
+
   const first = presentIndices.length > 0 ? presentIndices[0] : points.length;
   const last = presentIndices.length > 0 ? presentIndices[presentIndices.length - 1] : -1;
 
   return {
     presentIndices,
-    absentIndices,
+    absentIndices: counted,
     bridges,
-    leadingAbsent: absentIndices.filter((i) => i < first),
-    trailingAbsent: presentIndices.length > 0 ? absentIndices.filter((i) => i > last) : [],
+    leadingAbsent: counted.filter((i) => i < first),
+    trailingAbsent: presentIndices.length > 0 ? counted.filter((i) => i > last) : [],
   };
+}
+
+/**
+ * Indices of present points with no present neighbour; the window edges count
+ * as absent. These are the points a line chart would draw as nothing at all.
+ */
+export function isolatedPresentIndices(points: readonly (number | null)[]): number[] {
+  const out: number[] = [];
+  points.forEach((v, i) => {
+    if (v !== null && points[i - 1] == null && points[i + 1] == null) out.push(i);
+  });
+  return out;
 }
 
 /**

@@ -1,7 +1,7 @@
 // Spot-check: run with `npx tsx scripts/data-gaps-check.ts`
 // (also under TZ=America/Los_Angeles / Pacific/Auckland).
 import assert from "node:assert/strict";
-import { buildGapModel, bridgeSeriesValues, absenceLabel, absenceText } from "@/lib/charts/data-gaps";
+import { buildGapModel, bridgeSeriesValues, isolatedPresentIndices, pendingTodayIndex, absenceLabel, absenceText } from "@/lib/charts/data-gaps";
 import { addDays } from "@/lib/dates";
 
 console.log("TZ:", Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -99,6 +99,48 @@ function assertBridgesOnlyCrossNulls(points: (number | null)[]): void {
   const [b1, b2] = buildGapModel(p).bridges;
   assert.deepEqual(bridgeSeriesValues(p, b1), [1, N, 2, N, N, N, N]);
   assert.deepEqual(bridgeSeriesValues(p, b2), [N, N, N, 3, N, N, 4]);
+}
+
+// 9c. isolatedPresentIndices.
+{
+  assert.deepEqual(isolatedPresentIndices([5, N, 6, 7]), [0]);          // first
+  assert.deepEqual(isolatedPresentIndices([6, 7, N, 5]), [3]);          // last
+  assert.deepEqual(isolatedPresentIndices([6, 7, N, 5, N, 8, 9]), [3]); // middle
+  assert.deepEqual(isolatedPresentIndices([N, 4, N]), [1]);             // single point
+  assert.deepEqual(isolatedPresentIndices([4]), [0]);                   // lone point, both edges
+  assert.deepEqual(isolatedPresentIndices([1, N, 2, N, N, 3]), [0, 2, 5]);
+  assert.deepEqual(isolatedPresentIndices([1, 2, 3]), []);              // none
+  assert.deepEqual(isolatedPresentIndices([N, N]), []);
+  assert.deepEqual(isolatedPresentIndices([]), []);
+  assert.deepEqual(isolatedPresentIndices([0, N, 0, 0]), [0]);          // zero is present
+  // A-gap-B-gap-C: B isolated, and A, C only if they lack a present neighbour.
+  assert.deepEqual(isolatedPresentIndices([1, 1, N, 2, N, 3, 3]), [3]);
+}
+
+// 9d. todayIsPending exclusion.
+{
+  const dates = ["2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27"];
+  const today = "2026-10-27";
+  const withToday = [80, N, 85, N];
+  assert.equal(pendingTodayIndex(dates, withToday, today, true), 3);
+  assert.equal(pendingTodayIndex(dates, withToday, today, false), null);        // chart did not opt in
+  assert.equal(pendingTodayIndex(dates, [80, N, 85, 90], today, true), null);   // today has a value: nothing changes
+  assert.equal(pendingTodayIndex(dates, withToday, "2026-10-28", true), null);  // last point is not today
+  assert.equal(pendingTodayIndex([], [], today, true), null);
+
+  const ignored = buildGapModel(withToday, { ignoreIndex: 3 });
+  assert.deepEqual(ignored.absentIndices, [1]);
+  assert.deepEqual(ignored.trailingAbsent, []);
+  assert.deepEqual(ignored.leadingAbsent, []);
+  assert.deepEqual(ignored.bridges, [{ fromIndex: 0, toIndex: 2 }]);
+  // Same input without the option still counts it.
+  assert.deepEqual(buildGapModel(withToday).trailingAbsent, [3]);
+  // Today present: model identical with or without the option.
+  const full = [80, N, 85, 90];
+  assert.deepEqual(buildGapModel(full, { ignoreIndex: pendingTodayIndex(dates, full, today, true) }), buildGapModel(full));
+  // Only absence is pending today: nothing to draw, so no caption.
+  const none = buildGapModel([80, 81, 82, N], { ignoreIndex: 3 });
+  assert.equal(none.bridges.length + none.absentIndices.length, 0);
 }
 
 // 10. absenceLabel. today 2026-10-26; re-fetch window 10-23 .. 10-26; stale after 6h.

@@ -18,7 +18,7 @@ import {
 import { localToday } from "@/lib/dates";
 import { formatDateMMDD } from "@/lib/format";
 import { selectTrendTicks } from "@/lib/charts/trend-ticks";
-import { absenceLabel, absenceText, bridgeSeriesValues, buildGapModel } from "@/lib/charts/data-gaps";
+import { absenceLabel, absenceText, bridgeSeriesValues, buildGapModel, isolatedPresentIndices, pendingTodayIndex } from "@/lib/charts/data-gaps";
 import { EYEBROW, NeutralCard } from "./stat-card";
 
 // ---------------------------------------------------------------------------
@@ -45,6 +45,8 @@ const TICK_TARGET = 7;
 // Gap treatment: muted token colour, no new hex.
 const GAP_STROKE = "var(--color-on-surface-variant)";
 const ABSENT_TICK_PX = 6;
+const ISOLATED_DOT_R = 2; // 4px diameter, same colour as the solid line
+const LINE_COLOR = "#000000";
 
 /** Padded, rounded-to-5 domain clamped to [0, 100]. */
 function fittedDomain(min: number | null, max: number | null): [number, number] {
@@ -72,19 +74,26 @@ export default function SleepCharts({ data, lastSyncedAt = null }: { data: Score
   const trend  = calculateSeriesTrend(series, activeWindow, localToday());
   const { points, stats } = trend;
 
-  const gaps = buildGapModel(points.map((p) => p.value));
+  const values = points.map((p) => p.value);
+  // The series is keyed by night-of date: tonight's slot cannot exist yet, so it is not a gap.
+  const pendingIdx = pendingTodayIndex(points.map((p) => p.date), values, localToday(), true);
+  const gaps = buildGapModel(values, { ignoreIndex: pendingIdx });
+  const isolated = new Set(isolatedPresentIndices(values));
   const lastSyncedAtMs = lastSyncedAt ? Date.parse(lastSyncedAt) : null;
   const [domainMin, domainMax] = fittedDomain(stats.min, stats.max);
 
-  const bridgeValues = gaps.bridges.map((b) => bridgeSeriesValues(points.map((q) => q.value), b));
+  const bridgeValues = gaps.bridges.map((b) => bridgeSeriesValues(values, b));
 
   const chartData = points.map((p, i) => {
-    const row: Record<string, number | string | null> = {
+    const row: Record<string, number | string | boolean | null> = {
       date:        p.date,
       displayDate: formatDateMMDD(p.date),
       sleepScore:  p.value,
       // Baseline tick anchor: only absent days carry a value, pinned to the axis floor.
-      absentTick:  p.value === null ? domainMin : null,
+      absentTick:  p.value === null && i !== pendingIdx ? domainMin : null,
+      // Anchor dot only for a score with no solid-line neighbour (nothing else would draw it).
+      isolatedDot: isolated.has(i) ? p.value : null,
+      pending:     i === pendingIdx,
     };
     bridgeValues.forEach((vals, k) => { row[`bridge${k}`] = vals[i]; });
     return row;
@@ -148,7 +157,7 @@ export default function SleepCharts({ data, lastSyncedAt = null }: { data: Score
               content={({ active, label }) => {
                 if (!active) return null;
                 const row = chartData.find((r) => r.displayDate === label);
-                if (!row) return null;
+                if (!row || row.pending) return null;
                 const score = row.sleepScore;
                 const text = score !== null
                   ? `Sleep Score : ${score}`
@@ -210,12 +219,23 @@ export default function SleepCharts({ data, lastSyncedAt = null }: { data: Score
                 )
               }
             />
+            {/* Visible anchor for a score whose neighbours are both absent. */}
+            <Line
+              dataKey="isolatedDot"
+              stroke="none"
+              activeDot={false}
+              isAnimationActive={false}
+              legendType="none"
+              dot={({ cx, cy, index }) =>
+                cx == null || cy == null ? <g key={index} /> : <circle key={index} cx={cx} cy={cy} r={ISOLATED_DOT_R} fill={LINE_COLOR} />
+              }
+            />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
-      {gaps.absentIndices.length > 0 && (
-        <p className="mt-3 text-xs text-on-surface-variant">Dotted line: no reading that day.</p>
+      {(gaps.bridges.length > 0 || gaps.absentIndices.length > 0) && (
+        <p className="mt-3 text-xs text-on-surface-variant">Dotted line or gray tick: no reading that day.</p>
       )}
     </NeutralCard>
   );
