@@ -185,7 +185,7 @@ export default async function HeartRateDetailPage({
           <HrTrendChart summaries={summaries} lastSyncedAt={data?.lastSyncedAt ?? null} />
 
           {/* ── Recovery vs Normal — z-scores against 90-day baseline ── */}
-          <RecoveryBalanceChart summaries={summaries} />
+          <RecoveryBalanceChart summaries={summaries} lastSyncedAt={data?.lastSyncedAt ?? null} />
         </>
       )}
     </PageShell>

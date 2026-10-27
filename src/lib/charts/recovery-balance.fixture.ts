@@ -82,3 +82,44 @@ assert(largeGeo.yTicks.length === 9, `large: 9 ticks (-4..+4), got ${largeGeo.yT
 // ---------------------------------------------------------------------------
 
 console.log("All assertions passed.");
+
+// ---------------------------------------------------------------------------
+// (c) Gap bridges and both-absent ticks.
+// ---------------------------------------------------------------------------
+
+{
+  const N = null;
+  // Gap in ONE series only: RHR has an interior gap (idx 2), HRV is complete.
+  const g1 = buildRecoveryBalanceGeometry([1, 0.5, N, -0.5, 0], [0, 1, 0, -1, 0]);
+  assert(g1.rhrBridges.length === 1, "one-series gap: one RHR bridge");
+  assert(g1.hrvBridges.length === 0, "one-series gap: HRV has none");
+  assert(g1.rhrBridges[0].fromIndex === 1 && g1.rhrBridges[0].toIndex === 3, "bridge joins idx 1 -> 3");
+  assert(near(g1.rhrBridges[0].from.xFrac, g1.xFracs[1]) && near(g1.rhrBridges[0].to.xFrac, g1.xFracs[3]), "bridge x ends on the real points");
+  // Same yFrac math as the solid run: the bridge ends coincide with the segment points.
+  assert(near(g1.rhrBridges[0].from.yFrac, g1.rhrSegments[0][1].yFrac), "bridge start == end of first run");
+  assert(near(g1.rhrBridges[0].to.yFrac, g1.rhrSegments[1][0].yFrac), "bridge end == start of next run");
+  assert(g1.bothAbsentIndices.length === 0, "one metric present every day: no ticks");
+
+  // Gaps in BOTH series; idx 2 absent in both, idx 4 only RHR, idx 5 only HRV.
+  const g2 = buildRecoveryBalanceGeometry([1, 0.5, N, 0.2, N, 1, 0], [0, 1, N, 0, 1, N, 0]);
+  assert(g2.rhrBridges.length === 2 && g2.hrvBridges.length === 2, "gaps in both: two bridges each");
+  assert(JSON.stringify(g2.bothAbsentIndices) === "[2]", `ticks only where both absent, got ${JSON.stringify(g2.bothAbsentIndices)}`);
+
+  // Gap touching the window edge: leading and trailing nulls get no bridge, no extrapolation.
+  const g3 = buildRecoveryBalanceGeometry([N, N, 1, 0.5, N], [0, N, N, 1, 1]);
+  assert(g3.rhrBridges.length === 0, "edge gaps: no RHR bridge");
+  assert(g3.hrvBridges.length === 1 && g3.hrvBridges[0].fromIndex === 0 && g3.hrvBridges[0].toIndex === 3, "HRV interior gap bridged");
+  assert(JSON.stringify(g3.bothAbsentIndices) === "[1]", "both absent only at idx 1");
+
+  // A series with no baseline is all-null: no bridges, and it never forces a tick.
+  const g4 = buildRecoveryBalanceGeometry([N, N, N, N], [1, N, 0, N]);
+  assert(g4.rhrBridges.length === 0, "all-null series: no bridges");
+  assert(g4.hrvBridges.length === 1 && g4.hrvBridges[0].fromIndex === 0 && g4.hrvBridges[0].toIndex === 2, "HRV interior gap 0->2 only; trailing null gets none");
+  assert(JSON.stringify(g4.bothAbsentIndices) === "[1,3]", "ticks follow the only series with data");
+
+  // Present-point geometry is unchanged by the additions.
+  const base = buildRecoveryBalanceGeometry([1, N, 0.5], [0, 1, 0]);
+  assert(base.rhrSegments.length === 2 && base.rhrMarkers.length === 2, "segments and markers unchanged by bridges");
+}
+
+console.log("recovery-balance fixtures OK");

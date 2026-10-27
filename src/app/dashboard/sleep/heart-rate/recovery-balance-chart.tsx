@@ -4,8 +4,10 @@ import { useRef, useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   buildRecoveryBalanceGeometry,
+  type ZBridge,
   type ZPoint,
 } from "@/lib/charts/recovery-balance";
+import { absenceLabel, absenceText } from "@/lib/charts/data-gaps";
 import {
   standardizeRecoverySeries,
   trendSentiment,
@@ -38,12 +40,21 @@ const PILL_INACTIVE = "bg-surface-container text-on-surface-variant hover:bg-sur
 const RHR_COLOR = "var(--color-heart-accent)";
 const HRV_COLOR = "var(--color-hrv-accent)";
 
+// Gap treatment: each bridge in its own series colour, faded, same dotted dash as the other charts.
+const BRIDGE_OPACITY = 0.4;
+const ABSENT_TICK_PX = 6;
+const GAP_STROKE = "var(--color-on-surface-variant)";
+
 function isValidWindow(s: string | null): s is HrWindow {
   return s === "week" || s === "month" || s === "90d";
 }
 
 function directionHint(metric: HrMetric): string {
   return METRIC_DIRECTION[metric] > 0 ? "higher = better" : "higher = worse";
+}
+
+function bridgeToPath(b: ZBridge): string {
+  return `M${(b.from.xFrac * 100).toFixed(2)} ${(b.from.yFrac * 100).toFixed(2)} L${(b.to.xFrac * 100).toFixed(2)} ${(b.to.yFrac * 100).toFixed(2)}`;
 }
 
 function segToPath(seg: ZPoint[]): string {
@@ -126,9 +137,11 @@ function RingMarker({ m, color, index }: { m: ZPoint; color: string; index: numb
 
 interface Props {
   summaries: DailyHrSummary[];
+  /** ISO timestamp of the last sync; decides "Not synced yet" vs "No reading" on recent absent days. */
+  lastSyncedAt?: string | null;
 }
 
-export default function RecoveryBalanceChart({ summaries }: Props) {
+export default function RecoveryBalanceChart({ summaries, lastSyncedAt = null }: Props) {
   const router       = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
@@ -160,6 +173,13 @@ export default function RecoveryBalanceChart({ summaries }: Props) {
   const geo = buildRecoveryBalanceGeometry(rhrSeries.points, hrvSeries.points);
 
   const bothAbsent = !rhrSeries.baselineReady && !hrvSeries.baselineReady;
+
+  // Gaps: bridges per drawn series, baseline ticks only where both metrics are absent.
+  const rhrBridges = rhrSeries.baselineReady ? geo.rhrBridges : [];
+  const hrvBridges = hrvSeries.baselineReady ? geo.hrvBridges : [];
+  const lastSyncedAtMs = lastSyncedAt ? Date.parse(lastSyncedAt) : null;
+  const gapDrawn = rhrBridges.length + hrvBridges.length + geo.bothAbsentIndices.length > 0;
+  const absence = (date: string) => absenceText(absenceLabel(date, { today, lastSyncedAtMs, nowMs: Date.now() }));
 
   const span    = geo.yMax - geo.yMin;
   const toYFrac = (z: number) => (geo.yMax - z) / span;
@@ -336,6 +356,47 @@ export default function RecoveryBalanceChart({ summaries }: Props) {
                   />
                 )}
 
+                {/* Dotted bridges across interior gaps, under the solid runs. */}
+                {rhrBridges.map((b, bi) => (
+                  <path
+                    key={`rb${bi}`}
+                    d={bridgeToPath(b)}
+                    fill="none"
+                    strokeWidth={1.5}
+                    strokeDasharray="2 4"
+                    strokeLinecap="round"
+                    strokeOpacity={BRIDGE_OPACITY}
+                    vectorEffect="non-scaling-stroke"
+                    style={{ stroke: RHR_COLOR }}
+                  />
+                ))}
+                {hrvBridges.map((b, bi) => (
+                  <path
+                    key={`hb${bi}`}
+                    d={bridgeToPath(b)}
+                    fill="none"
+                    strokeWidth={1.5}
+                    strokeDasharray="2 4"
+                    strokeLinecap="round"
+                    strokeOpacity={BRIDGE_OPACITY}
+                    vectorEffect="non-scaling-stroke"
+                    style={{ stroke: HRV_COLOR }}
+                  />
+                ))}
+
+                {/* Baseline tick on days where neither metric has a reading. */}
+                {geo.bothAbsentIndices.map((i) => (
+                  <line
+                    key={`t${i}`}
+                    x1={geo.xFracs[i] * 100} x2={geo.xFracs[i] * 100}
+                    y1="100" y2={100 - (ABSENT_TICK_PX / PLOT_H) * 100}
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                    style={{ stroke: GAP_STROKE }}
+                  />
+                ))}
+
                 {/* RHR line */}
                 {rhrSeries.baselineReady && geo.rhrSegments.map((seg, si) => (
                   <path
@@ -422,8 +483,7 @@ export default function RecoveryBalanceChart({ summaries }: Props) {
               )}
 
               {/* Hover tooltip */}
-              {hoverX !== null && hoverIdx !== null &&
-               (hoverRhrZ !== null || hoverHrvZ !== null) && (
+              {hoverX !== null && hoverIdx !== null && (
                 <div
                   className="absolute pointer-events-none rounded-lg px-3 py-2 text-xs shadow-lg z-10 whitespace-nowrap"
                   style={{
@@ -440,14 +500,18 @@ export default function RecoveryBalanceChart({ summaries }: Props) {
                   >
                     {formatDateMMDD(dates[hoverIdx])}
                   </div>
-                  {rhrSeries.baselineReady && hoverRhrZ !== null && (
+                  {rhrSeries.baselineReady && (
                     <div style={{ color: "#e5e2d9" }}>
-                      Resting HR {hoverRhrZ > 0 ? "+" : ""}{hoverRhrZ.toFixed(2)} σ
+                      {hoverRhrZ !== null
+                        ? <>Resting HR {hoverRhrZ > 0 ? "+" : ""}{hoverRhrZ.toFixed(2)} σ</>
+                        : <>Resting HR: {absence(dates[hoverIdx])}</>}
                     </div>
                   )}
-                  {hrvSeries.baselineReady && hoverHrvZ !== null && (
+                  {hrvSeries.baselineReady && (
                     <div style={{ color: "#e5e2d9" }}>
-                      HRV {hoverHrvZ > 0 ? "+" : ""}{hoverHrvZ.toFixed(2)} σ
+                      {hoverHrvZ !== null
+                        ? <>HRV {hoverHrvZ > 0 ? "+" : ""}{hoverHrvZ.toFixed(2)} σ</>
+                        : <>HRV: {absence(dates[hoverIdx])}</>}
                     </div>
                   )}
                 </div>
@@ -477,6 +541,10 @@ export default function RecoveryBalanceChart({ summaries }: Props) {
               );
             })}
           </div>
+
+          {gapDrawn && (
+            <p className="mt-3 text-xs text-on-surface-variant">Dotted line or gray tick: no reading that day.</p>
+          )}
         </>
       )}
     </ExpandableCard>

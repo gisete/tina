@@ -2,6 +2,7 @@
 // Primitives in, JSON-safe primitives out — no React, no DOM imports.
 // Component maps the returned structs to SVG/DOM; no coordinate math lives there.
 
+import { buildGapModel } from "./data-gaps";
 import { selectTrendTicks } from "./trend-ticks";
 
 export interface ZPoint {
@@ -9,6 +10,15 @@ export interface ZPoint {
   xFrac: number;
   /** Vertical fraction, 0 = top edge, 1 = bottom edge. */
   yFrac: number;
+}
+
+/** A dotted connector between the end of one run and the start of the next in ONE series. */
+export interface ZBridge {
+  from: ZPoint;
+  to: ZPoint;
+  /** Data-point indices of the two real points it joins. */
+  fromIndex: number;
+  toIndex: number;
 }
 
 export interface RecoveryBalanceTick {
@@ -42,6 +52,19 @@ export interface RecoveryBalanceGeometry {
   rhrMarkers: ZPoint[];
   /** One entry per non-null HRV point. */
   hrvMarkers: ZPoint[];
+  /**
+   * Dotted bridges across interior gaps of the RHR z-series: last real point
+   * before the gap to first real point after it. Never at the window edges.
+   */
+  rhrBridges: ZBridge[];
+  hrvBridges: ZBridge[];
+  /**
+   * Data-point indices where BOTH series have no value (the only days that get
+   * a baseline tick, since one metric alone being absent is already visible as
+   * a bridge or a run break). A series with no baseline is all-null, so it
+   * leaves the decision to the other one.
+   */
+  bothAbsentIndices: number[];
 }
 
 const TICK_TARGET = 7;
@@ -109,6 +132,16 @@ export function buildRecoveryBalanceGeometry(
       .map((v, i) => (v !== null ? { xFrac: xFracs[i], yFrac: toYFrac(v) } : null))
       .filter((m): m is ZPoint => m !== null);
 
+  const buildBridges = (points: (number | null)[]): ZBridge[] =>
+    buildGapModel(points).bridges.map((b) => ({
+      from: { xFrac: xFracs[b.fromIndex], yFrac: toYFrac(points[b.fromIndex] as number) },
+      to: { xFrac: xFracs[b.toIndex], yFrac: toYFrac(points[b.toIndex] as number) },
+      fromIndex: b.fromIndex,
+      toIndex: b.toIndex,
+    }));
+
+  const bothAbsentIndices = rhrPoints.flatMap((v, i) => (v === null && hrvPoints[i] === null ? [i] : []));
+
   return {
     yMin,
     yMax,
@@ -120,5 +153,8 @@ export function buildRecoveryBalanceGeometry(
     hrvSegments: buildSegments(hrvPoints),
     rhrMarkers: buildMarkers(rhrPoints),
     hrvMarkers: buildMarkers(hrvPoints),
+    rhrBridges: buildBridges(rhrPoints),
+    hrvBridges: buildBridges(hrvPoints),
+    bothAbsentIndices,
   };
 }
