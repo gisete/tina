@@ -348,7 +348,7 @@ export default async function SleepPage({
           </div>{/* end Current Status */}
 
           {/* ════ SLEEP SCORE TREND ══════════════════════════════════════════ */}
-          <SleepCharts data={(data.chartTimeline || []).map(({ date, sleepScore }) => ({ date, sleepScore }))} />
+          <SleepCharts data={(data.chartTimeline || []).map(({ date, sleepScore }) => ({ date, sleepScore }))} lastSyncedAt={data.lastSyncedAt ?? null} />
 
         </div>
       )}

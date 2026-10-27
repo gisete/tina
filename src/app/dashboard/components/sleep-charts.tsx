@@ -3,8 +3,9 @@
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   ResponsiveContainer,
-  AreaChart,
+  ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -17,6 +18,7 @@ import {
 import { localToday } from "@/lib/dates";
 import { formatDateMMDD } from "@/lib/format";
 import { selectTrendTicks } from "@/lib/charts/trend-ticks";
+import { absenceLabel, absenceText, bridgeSeriesValues, buildGapModel } from "@/lib/charts/data-gaps";
 import { EYEBROW, NeutralCard } from "./stat-card";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +42,10 @@ const PILL_ACTIVE   = "bg-on-surface text-white";
 const PILL_INACTIVE = "bg-surface-container text-on-surface-variant hover:bg-surface-container-high";
 const TICK_TARGET = 7;
 
+// Gap treatment: muted token colour, no new hex.
+const GAP_STROKE = "var(--color-on-surface-variant)";
+const ABSENT_TICK_PX = 6;
+
 /** Padded, rounded-to-5 domain clamped to [0, 100]. */
 function fittedDomain(min: number | null, max: number | null): [number, number] {
   if (min === null || max === null) return [0, 100];
@@ -48,7 +54,7 @@ function fittedDomain(min: number | null, max: number | null): [number, number] 
   return [lo, hi === lo ? lo + 10 : hi];
 }
 
-export default function SleepCharts({ data }: { data: ScorePoint[] }) {
+export default function SleepCharts({ data, lastSyncedAt = null }: { data: ScorePoint[]; lastSyncedAt?: string | null }) {
   const router       = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
@@ -66,13 +72,25 @@ export default function SleepCharts({ data }: { data: ScorePoint[] }) {
   const trend  = calculateSeriesTrend(series, activeWindow, localToday());
   const { points, stats } = trend;
 
-  const chartData = points.map((p) => ({
-    displayDate: formatDateMMDD(p.date),
-    sleepScore:  p.value,
-  }));
+  const gaps = buildGapModel(points.map((p) => p.value));
+  const lastSyncedAtMs = lastSyncedAt ? Date.parse(lastSyncedAt) : null;
+  const [domainMin, domainMax] = fittedDomain(stats.min, stats.max);
 
-  const tickIndices             = selectTrendTicks(chartData.length, TICK_TARGET);
-  const [domainMin, domainMax]  = fittedDomain(stats.min, stats.max);
+  const bridgeValues = gaps.bridges.map((b) => bridgeSeriesValues(points.map((q) => q.value), b));
+
+  const chartData = points.map((p, i) => {
+    const row: Record<string, number | string | null> = {
+      date:        p.date,
+      displayDate: formatDateMMDD(p.date),
+      sleepScore:  p.value,
+      // Baseline tick anchor: only absent days carry a value, pinned to the axis floor.
+      absentTick:  p.value === null ? domainMin : null,
+    };
+    bridgeValues.forEach((vals, k) => { row[`bridge${k}`] = vals[i]; });
+    return row;
+  });
+
+  const tickIndices = selectTrendTicks(chartData.length, TICK_TARGET);
 
   return (
     <NeutralCard className="flex flex-col">
@@ -100,7 +118,7 @@ export default function SleepCharts({ data }: { data: ScorePoint[] }) {
 
       <div style={{ height: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 6, right: 10, left: -30, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 6, right: 10, left: -30, bottom: 0 }}>
             <defs>
               <linearGradient id="colorSleepScore" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%"  stopColor="#f5fda9" stopOpacity={0.8} />
@@ -127,12 +145,21 @@ export default function SleepCharts({ data }: { data: ScorePoint[] }) {
               style={{ fontFamily: "var(--font-sans)" }}
             />
             <Tooltip
-              contentStyle={{ backgroundColor: "#1c1c16", borderRadius: "8px", border: "none" }}
-              labelStyle={{ color: "#ffffff", fontFamily: "var(--font-display)", fontWeight: "bold" }}
-              itemStyle={{ color: "#e5e2d9", fontFamily: "var(--font-sans)" }}
-              formatter={(value) =>
-                value != null ? [`${value}`, "Sleep Score"] : ["—", "Sleep Score"]
-              }
+              content={({ active, label }) => {
+                if (!active) return null;
+                const row = chartData.find((r) => r.displayDate === label);
+                if (!row) return null;
+                const score = row.sleepScore;
+                const text = score !== null
+                  ? `Sleep Score : ${score}`
+                  : absenceText(absenceLabel(String(row.date), { today: localToday(), lastSyncedAtMs, nowMs: Date.now() }));
+                return (
+                  <div style={{ backgroundColor: "#1c1c16", borderRadius: 8, padding: "10px 12px" }}>
+                    <p style={{ color: "#ffffff", fontFamily: "var(--font-display)", fontWeight: "bold", margin: 0 }}>{label}</p>
+                    <p style={{ color: "#e5e2d9", fontFamily: "var(--font-sans)", margin: "4px 0 0" }}>{text}</p>
+                  </div>
+                );
+              }}
             />
             <Area
               type="monotone"
@@ -143,9 +170,53 @@ export default function SleepCharts({ data }: { data: ScorePoint[] }) {
               fill="url(#colorSleepScore)"
               connectNulls={false}
             />
-          </AreaChart>
+            {/* One two-point dotted segment per bridge. connectNulls only spans the
+                nulls inside that bridge: its series holds just the two real endpoints. */}
+            {bridgeValues.map((_, k) => (
+              <Line
+                key={`bridge${k}`}
+                dataKey={`bridge${k}`}
+                type="linear"
+                stroke={GAP_STROKE}
+                strokeWidth={1.5}
+                strokeDasharray="2 4"
+                strokeLinecap="round"
+                dot={false}
+                activeDot={false}
+                connectNulls
+                isAnimationActive={false}
+                legendType="none"
+              />
+            ))}
+            {/* Baseline tick at every absent day (leading, interior, trailing). */}
+            <Line
+              dataKey="absentTick"
+              stroke="none"
+              activeDot={false}
+              isAnimationActive={false}
+              legendType="none"
+              dot={({ cx, cy, index }) =>
+                cx == null || cy == null ? <g key={index} /> : (
+                  <line
+                    key={index}
+                    x1={cx}
+                    x2={cx}
+                    y1={cy - ABSENT_TICK_PX}
+                    y2={cy}
+                    stroke={GAP_STROKE}
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                  />
+                )
+              }
+            />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+      {gaps.absentIndices.length > 0 && (
+        <p className="mt-3 text-xs text-on-surface-variant">Dotted line: no reading that day.</p>
+      )}
     </NeutralCard>
   );
 }
