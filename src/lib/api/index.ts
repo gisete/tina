@@ -7,3 +7,5 @@ export * from "./day";
 export * from "./state";
 export * from "./params";
 export * from "./windows";
+export * from "./sync-loop";
+export * from "./sync-response";

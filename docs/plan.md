@@ -46,7 +46,7 @@ DB-only, no Google calls under any circumstance, including no lazy HR-sample fet
 The API sleep score for a night must equal what the dashboard shows for that night: use the dashboard's exact call.
 
 ## Task 8 — Sync endpoint (scope "sync")
-Status: todo
+Status: done (code + stub-driven fixture; not called against Google — see progress.md)
 `POST /api/v1/sync` runs the existing step function in a server-side loop, capped at 8 steps or 45 seconds, returns `{ status: "fresh" | "synced" | "pending" | "auth_required" | "error", stepsRun, syncedThrough, lastSyncedAt }`. If the 6-hour staleness rule says nothing is due and there is no gap, return "fresh" without calling Google. If the existing lock is held, return "pending". No other write endpoints.
 
 ## Task 9 — GET /api/v1/schema
