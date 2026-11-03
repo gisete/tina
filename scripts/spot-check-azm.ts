@@ -21,16 +21,16 @@ async function main() {
   console.log("\nDate          L       M    V    P    AZM(live)");
   for (const r of sorted) {
     const azm = calculateActiveZoneMinutes({
-      light: r.lightMinutes, moderate: r.moderateMinutes,
-      vigorous: r.vigorousMinutes, peak: r.peakMinutes,
+      light: (r.lightMinutes ?? 0), moderate: (r.moderateMinutes ?? 0),
+      vigorous: (r.vigorousMinutes ?? 0), peak: (r.peakMinutes ?? 0),
     });
-    console.log(`${r.activityDate}  L=${String(r.lightMinutes).padEnd(4)}  M=${String(r.moderateMinutes).padEnd(3)}  V=${String(r.vigorousMinutes).padEnd(3)}  P=${String(r.peakMinutes).padEnd(3)}  AZM=${azm}`);
+    console.log(`${r.activityDate}  L=${String(r.lightMinutes ?? 0).padEnd(4)}  M=${String(r.moderateMinutes ?? 0).padEnd(3)}  V=${String(r.vigorousMinutes ?? 0).padEnd(3)}  P=${String(r.peakMinutes ?? 0).padEnd(3)}  AZM=${azm}`);
   }
 
   const weekRows = sorted.filter(r => r.activityDate >= "2026-06-16" && r.activityDate <= "2026-06-18");
   const weekTotal = weekRows.reduce((s, r) => s + calculateActiveZoneMinutes({
-    light: r.lightMinutes, moderate: r.moderateMinutes,
-    vigorous: r.vigorousMinutes, peak: r.peakMinutes,
+    light: (r.lightMinutes ?? 0), moderate: (r.moderateMinutes ?? 0),
+    vigorous: (r.vigorousMinutes ?? 0), peak: (r.peakMinutes ?? 0),
   }), 0);
   console.log(`\nWeek-to-date (Mon Jun 16 – Wed Jun 18): ${weekTotal} AZM`);
   console.log("Expected: 1 (Jun16) + 0 (Jun17) + 3 (Jun18) = 4");

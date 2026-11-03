@@ -38,7 +38,9 @@ export async function readHrSummaries(
 /**
  * Returns per-zone minute totals for a user within a calendar-day range,
  * inclusive of both endpoints. Callers compute AZM live via
- * calculateActiveZoneMinutes — no stored AZM column is read here.
+ * calculateActiveZoneMinutes — no stored AZM column is read here. A NULL zone
+ * column (never fetched) reads as 0 here so dashboard math is unchanged; the
+ * API layer reads the raw nullable rows instead.
  */
 export async function readActivitySummaries(
   userId: string,
@@ -56,10 +58,10 @@ export async function readActivitySummaries(
 
   return rows.map((r) => ({
     activityDate:    r.activityDate,
-    lightMinutes:    r.lightMinutes,
-    moderateMinutes: r.moderateMinutes,
-    vigorousMinutes: r.vigorousMinutes,
-    peakMinutes:     r.peakMinutes,
+    lightMinutes:    r.lightMinutes ?? 0,
+    moderateMinutes: r.moderateMinutes ?? 0,
+    vigorousMinutes: r.vigorousMinutes ?? 0,
+    peakMinutes:     r.peakMinutes ?? 0,
   }));
 }
 

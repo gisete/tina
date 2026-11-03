@@ -93,10 +93,11 @@ export const dailyActivitySummaries = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     activityDate: date("activity_date").notNull(),
-    lightMinutes: integer("light_minutes").notNull().default(0),
-    moderateMinutes: integer("moderate_minutes").notNull().default(0),
-    vigorousMinutes: integer("vigorous_minutes").notNull().default(0),
-    peakMinutes: integer("peak_minutes").notNull().default(0),
+    /** Active-zone minutes per zone. Null = never fetched for the day (not a measured zero). */
+    lightMinutes: integer("light_minutes"),
+    moderateMinutes: integer("moderate_minutes"),
+    vigorousMinutes: integer("vigorous_minutes"),
+    peakMinutes: integer("peak_minutes"),
     /** Daily step total; nullable until a steps sync has run for the day. */
     steps: integer("steps"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

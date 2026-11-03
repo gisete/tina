@@ -20,7 +20,7 @@ Status: done (already implemented before this plan; verified, not re-run)
 Move `/api/sync?days=N` onto the chunked civil-date sync path (`src/lib/sync/step.ts`), then delete `runGoogleSync` and the unused `shouldAutoSync`, and merge the duplicate 6-hour staleness constants into one. Acceptance: no caller of `runGoogleSync` remains; before and after running `?days=30`, a read-only snapshot of `daily_activity_summaries` shows no AZM value decreased and no day lost data. Report the diff.
 
 ## Task 3 — Honest absence, data layer only
-Status: todo
+Status: blocked: schema change committed but NOT pushed — OK to run `npx drizzle-kit push` to drop NOT NULL/DEFAULT 0 on the four AZM columns of daily_activity_summaries? (diff in progress.md)
 In `src/lib/api/` (pure TS) define a discriminated union for every exposed metric value:
 `{ status: "measured", value, unit } | { status: "estimated", value, unit, method } | { status: "derived", value, unit } | { status: "unavailable", reason: "not_worn" | "not_synced" | "not_fetched" | "not_supported" | "partial_day" }`.
 Absence is decided by the sync cursor: a date on or before `synced_through` with no data is `not_worn`; after it, `not_synced`; today's partial values are measured but flagged `partial_day` where relevant. Add a pure classifier with fixtures. Make the AZM columns on `daily_activity_summaries` nullable (drop DEFAULT 0) so absence stops reading as zero. This alters an existing table: write the change, show the schema diff, and STOP before `drizzle-kit push`.

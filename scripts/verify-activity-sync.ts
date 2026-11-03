@@ -21,13 +21,13 @@ async function main() {
   console.log("─".repeat(50));
   for (const r of rows) {
     const azm = calculateActiveZoneMinutes({
-      light: r.lightMinutes,
-      moderate: r.moderateMinutes,
-      vigorous: r.vigorousMinutes,
-      peak: r.peakMinutes,
+      light: (r.lightMinutes ?? 0),
+      moderate: (r.moderateMinutes ?? 0),
+      vigorous: (r.vigorousMinutes ?? 0),
+      peak: (r.peakMinutes ?? 0),
     });
     console.log(
-      `${r.activityDate}   ${String(r.lightMinutes).padStart(4)}  ${String(r.moderateMinutes).padStart(4)}  ${String(r.vigorousMinutes).padStart(3)}  ${String(r.peakMinutes).padStart(4)}  ${azm}`
+      `${r.activityDate}   ${String(r.lightMinutes ?? 0).padStart(4)}  ${String(r.moderateMinutes ?? 0).padStart(4)}  ${String(r.vigorousMinutes ?? 0).padStart(3)}  ${String(r.peakMinutes ?? 0).padStart(4)}  ${azm}`
     );
   }
   process.exit(0);
