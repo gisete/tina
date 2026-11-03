@@ -26,7 +26,7 @@ In `src/lib/api/` (pure TS) define a discriminated union for every exposed metri
 Absence is decided by the sync cursor: a date on or before `synced_through` with no data is `not_worn`; after it, `not_synced`; today's partial values are measured but flagged `partial_day` where relevant. Add a pure classifier with fixtures. Make the AZM columns on `daily_activity_summaries` nullable (drop DEFAULT 0) so absence stops reading as zero. This alters an existing table: write the change, show the schema diff, and STOP before `drizzle-kit push`.
 
 ## Task 4 — AZM light-minutes investigation (read-only)
-Status: todo
+Status: blocked: findings written (progress.md) from code, docs and stored data, but no raw API sample — OK to run a one-off read-only script that calls the existing zone fetch (and `daily-heart-rate-zones`) for one day? It is a Google call outside the sync path and may refresh the OAuth token (a write to the `account` table).
 `light_minutes` is ~1,270–1,430/day (≈ all worn time) while moderate/vigorous/peak are mostly 0. Diagnose the zone mapping from the code and a raw API response sample; report cause and proposed fix in progress.md. Do not change the mapping.
 
 ## Task 5 — Agent authentication
