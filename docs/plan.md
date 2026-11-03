@@ -12,7 +12,7 @@ Status: done
 4. Confirm the code-reviewer subagent is registered. (Confirmed: `.claude/agents/code-reviewer.md`.)
 
 ## Task 1 — Commit the pending heart-trend baseline work
-Status: todo
+Status: done
 Commit as it stands ("rolling 7-reading baseline on heart cards"). No code changes.
 
 ## Task 2 — Prompt B: move /api/sync?days=N onto the chunked sync path

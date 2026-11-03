@@ -13,6 +13,7 @@ import RecoveryBalanceChart from "./recovery-balance-chart";
 import { localToday, addDays } from "@/lib/dates";
 import { formatClockTime, formatNightRange } from "@/lib/format";
 import { EYEBROW, EmptyStateCard, NeutralCard } from "../../components/stat-card";
+import { BASELINE_LOOKBACK_DAYS } from "@/lib/charts/rolling-baseline";
 import { WINDOW_DAYS } from "@/lib/analytics/hr-trends";
 import { calculateStageHr } from "@/lib/analytics/sleep";
 
@@ -52,10 +53,14 @@ export default async function HeartRateDetailPage({
       : null;
 
   // Trend data — anchored to today regardless of the selected night.
-  // Fetch 2× the widest window so prevWindowAvgRhr is always computable.
+  // Fetch 2× the widest window so prevWindowAvgRhr is always computable, and never
+  // less than the widest window plus the baseline lookback (28 days before its start).
   const today = localToday();
   const maxWindowDays = Math.max(...(Object.values(WINDOW_DAYS) as number[]));
-  const trendStartDate = addDays(today, -(2 * maxWindowDays - 1));
+  const trendStartDate = addDays(
+    today,
+    -Math.max(2 * maxWindowDays - 1, maxWindowDays - 1 + BASELINE_LOOKBACK_DAYS),
+  );
   const summaries = await readHrSummaries(userId, trendStartDate, today);
 
   return (

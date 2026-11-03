@@ -14,6 +14,7 @@ import {
 } from "@/lib/analytics/hr-trends";
 import { localToday } from "@/lib/dates";
 import type { FitDomainOptions } from "@/lib/charts/trend-domain";
+import { rollingBaselineForWindow } from "@/lib/charts/rolling-baseline";
 import GapTrendChart from "../../components/gap-trend-chart";
 import ExpandableCard from "../../components/expandable-card";
 
@@ -49,6 +50,7 @@ interface MetricConfig {
   unit: string;
   seriesLabel: string;
   dataKey: "restingHeartRate" | "hrv";
+  summaryKey: "restingHeartRate" | "hrv";
   getAvg:    (s: HrTrendStats) => number | null;
   getMin:    (s: HrTrendStats) => number | null;
   getMax:    (s: HrTrendStats) => number | null;
@@ -63,10 +65,11 @@ interface MetricConfig {
 const METRIC_CONFIG: Record<HrMetric, MetricConfig> = {
   rhr: {
     title:       "Resting Heart Rate",
-    subtitle:    "Daily resting heart rate as of today. Dashed line = window average.",
+    subtitle:    "Daily resting heart rate as of today. Dashed line = average of last 7 readings.",
     unit:        "bpm",
     seriesLabel: "Resting HR",
     dataKey:     "restingHeartRate",
+    summaryKey:  "restingHeartRate",
     getAvg:      (s) => s.windowAvgRhr,
     getMin:      (s) => s.minRhr,
     getMax:      (s) => s.maxRhr,
@@ -79,10 +82,11 @@ const METRIC_CONFIG: Record<HrMetric, MetricConfig> = {
   },
   hrv: {
     title:       "HRV",
-    subtitle:    "Overnight HRV as of today. Dashed line = window average.",
+    subtitle:    "Overnight HRV as of today. Dashed line = average of last 7 readings.",
     unit:        "ms",
     seriesLabel: "HRV",
     dataKey:     "hrv",
+    summaryKey:  "hrv",
     getAvg:      (s) => s.windowAvgHrv,
     getMin:      (s) => s.minHrv,
     getMax:      (s) => s.maxHrv,
@@ -145,11 +149,14 @@ function MetricOverviewLine({
 function HrMetricCard({
   metric,
   result,
+  summaries,
   lastSyncedAt,
   nowMs,
 }: {
   metric: HrMetric;
   result: HrTrendResult;
+  /** Full loaded history (reaches back past the widest window); feeds the baseline lookback. */
+  summaries: DailyHrSummary[];
   lastSyncedAt: string | null;
   nowMs: number;
 }) {
@@ -158,8 +165,12 @@ function HrMetricCard({
 
   const series: SeriesPoint[] = points.map((p) => ({ date: p.date, value: p[cfg.dataKey] }));
   const avgValue = cfg.getAvg(stats);
-  // Baseline = the window average, the dashed line this card always drew.
-  const baseline = avgValue !== null ? series.map(() => avgValue) : undefined;
+  // Dashed baseline: mean of the last 7 readings before each day, computed over the
+  // extended series (history before the window) and sliced to the visible window.
+  const baseline = rollingBaselineForWindow(
+    summaries.map((r) => ({ date: r.date, value: r[cfg.summaryKey] })),
+    series.map((p) => p.date),
+  );
 
   const minValue = cfg.getMin(stats);
   const maxValue = cfg.getMax(stats);
@@ -312,9 +323,9 @@ export default function HrTrendChart({ summaries, lastSyncedAt = null }: Props) 
         ))}
       </div>
 
-      <HrMetricCard metric="rhr" result={result} lastSyncedAt={lastSyncedAt} nowMs={nowMs} />
+      <HrMetricCard metric="rhr" result={result} summaries={summaries} lastSyncedAt={lastSyncedAt} nowMs={nowMs} />
       <div className="my-8 border-t border-outline-variant/50" />
-      <HrMetricCard metric="hrv" result={result} lastSyncedAt={lastSyncedAt} nowMs={nowMs} />
+      <HrMetricCard metric="hrv" result={result} summaries={summaries} lastSyncedAt={lastSyncedAt} nowMs={nowMs} />
     </>
   );
 
