@@ -16,7 +16,7 @@ Status: done
 Commit as it stands ("rolling 7-reading baseline on heart cards"). No code changes.
 
 ## Task 2 — Prompt B: move /api/sync?days=N onto the chunked sync path
-Status: todo
+Status: done (already implemented before this plan; verified, not re-run)
 Move `/api/sync?days=N` onto the chunked civil-date sync path (`src/lib/sync/step.ts`), then delete `runGoogleSync` and the unused `shouldAutoSync`, and merge the duplicate 6-hour staleness constants into one. Acceptance: no caller of `runGoogleSync` remains; before and after running `?days=30`, a read-only snapshot of `daily_activity_summaries` shows no AZM value decreased and no day lost data. Report the diff.
 
 ## Task 3 — Honest absence, data layer only
