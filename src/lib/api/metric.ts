@@ -13,7 +13,9 @@ export type UnavailableReason =
   /** The source does not provide this metric. */
   | "not_supported"
   /** The day is not over, so the figure cannot be final. */
-  | "partial_day";
+  | "partial_day"
+  /** The data needed exists but there is too little of it to compute this (e.g. fewer nights than the metric requires). More syncing will not help until more history accrues. */
+  | "insufficient_data";
 
 /** Qualifiers on a present value. */
 export type MetricFlag = "partial_day";

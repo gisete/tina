@@ -34,7 +34,7 @@ Status: done (code). USER ACTION: `npx drizzle-kit push` (creates api_tokens; al
 New table `api_tokens`: id, user_id, name, token_hash (SHA-256; plaintext never stored), scopes (text[] of "read" | "sync"), created_at, last_used_at, revoked_at. Pure verifier in `src/lib/api/` (hash compare, revoked check, scope check) with fixtures. `scripts/create-api-token.ts` (name + scopes; prints plaintext once, stores only the hash) and `scripts/revoke-api-token.ts`. Do not run either against the real DB — STOP and ask the user to create a token with scopes read,sync and put it in `.env.local` as `TINA_API_TOKEN`. The Auth.js middleware must not redirect `/api/v1/*` to login; those routes authenticate by Bearer token only.
 
 ## Task 6 — API contract
-Status: todo
+Status: done
 In `src/lib/api/`, pure TS response types and builders (primitives in, plain JSON out, no Next imports). One envelope: `{ apiVersion: "1", generatedAt (instant with offset), timezone, data }` on success, or `{ apiVersion: "1", error: { code, message } }` on failure, as a discriminated union. Every metric uses the Task 3 union, with its unit. Derived values (sleep score and breakdown, debt, restlessness est., cardiac strain) are computed live by the existing engines — reuse them, never reimplement or change their math.
 
 ## Task 7 — Read endpoints (scope "read")
