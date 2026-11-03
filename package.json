@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check": "tsc --noEmit && npm run lint -- --max-warnings 0 && npm run build && bash scripts/run-fixtures.sh"
+    "check": "tsc --noEmit && npm run lint -- --max-warnings 0 && npm run build && bash scripts/run-fixtures.sh && npx tsx scripts/contract-smoke.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",

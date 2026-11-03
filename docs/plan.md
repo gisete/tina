@@ -54,5 +54,5 @@ Status: done
 Valid read token required. Machine-readable description of every endpoint, parameter, field, unit, and the meaning of each status and reason value, generated from or kept beside the contract types so it cannot drift silently. Field descriptions written for an AI reader: what each metric means and how it is estimated where relevant.
 
 ## Task 10 — Contract smoke test
-Status: todo
+Status: done (skips without TINA_API_TOKEN; not yet run against a live server — see progress.md)
 Added to `npm run check`, skipped with a clear message if `TINA_API_TOKEN` is absent. Starts nothing itself; expects the dev server running. Calls every read endpoint (day for today, yesterday, and a date before synced history begins; days for a 7-day and an over-cap range; state; schema), validates each response against the contract types at runtime, and asserts: over-cap range returns `range_too_large`; a date with no data returns unavailable values with a reason (never 0); the API sleep score for 3 recent nights equals the dashboard's. Must not call `/api/v1/sync`.
