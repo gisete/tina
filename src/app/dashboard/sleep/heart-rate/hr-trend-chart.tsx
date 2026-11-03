@@ -2,17 +2,6 @@
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ReferenceLine,
-  type DotItemDotProps,
-} from "recharts";
-import {
   calculateHrTrends,
   trendSentiment,
   type DailyHrSummary,
@@ -20,11 +9,11 @@ import {
   type HrMetric,
   type HrTrendStats,
   type HrTrendResult,
+  type SeriesPoint,
 } from "@/lib/analytics/hr-trends";
 import { localToday } from "@/lib/dates";
-import { formatDateMMDD } from "@/lib/format";
-import { selectTrendTicks } from "@/lib/charts/trend-ticks";
-import { absenceLabel, absenceText, bridgeSeriesValues, buildGapModel, isolatedPresentIndices } from "@/lib/charts/data-gaps";
+import type { FitDomainOptions } from "@/lib/charts/trend-domain";
+import GapTrendChart from "../../components/gap-trend-chart";
 import ExpandableCard from "../../components/expandable-card";
 
 // ---------------------------------------------------------------------------
@@ -48,6 +37,11 @@ const PILL_INACTIVE = "bg-surface-container text-on-surface-variant hover:bg-sur
 // Per-metric config — unchanged
 // ---------------------------------------------------------------------------
 
+// CSS variables resolve in style, not in SVG presentation attributes; GapTrendChart applies these via style={}.
+const HEART_COLOR = "var(--color-heart-accent)";
+const HRV_COLOR   = "var(--color-hrv-accent)";
+const tint = (c: string) => `color-mix(in srgb, ${c} 30%, transparent)`;
+
 interface MetricConfig {
   title: string;
   subtitle: string;
@@ -60,6 +54,9 @@ interface MetricConfig {
   getNights: (s: HrTrendStats) => number;
   getDelta:  (s: HrTrendStats) => number | null;
   emptyMsg:  string;
+  color: string;
+  fillColor: string;
+  domain: FitDomainOptions;
 }
 
 const METRIC_CONFIG: Record<HrMetric, MetricConfig> = {
@@ -75,6 +72,9 @@ const METRIC_CONFIG: Record<HrMetric, MetricConfig> = {
     getNights:   (s) => s.nightsWithData,
     getDelta:    (s) => s.rhrDeltaVsPrev,
     emptyMsg:    "No resting heart rate data for this period.",
+    color:       HEART_COLOR,
+    fillColor:   tint(HEART_COLOR),
+    domain:      { pad: 2, step: 2, minSpan: 10, floor: 0 },
   },
   hrv: {
     title:       "HRV",
@@ -88,16 +88,12 @@ const METRIC_CONFIG: Record<HrMetric, MetricConfig> = {
     getNights:   (s) => s.nightsWithHrv,
     getDelta:    (s) => s.hrvDeltaVsPrev,
     emptyMsg:    "No HRV data for this period.",
+    color:       HRV_COLOR,
+    fillColor:   tint(HRV_COLOR),
+    domain:      { pad: 5, step: 5, minSpan: 10, floor: 0 },
   },
 };
 
-const Y_AXIS_W   = 40;
-const TICK_TARGET = 7;
-
-// Gap treatment (same look as the Sleep Score Trend pilot): muted token colour, no new hex.
-const GAP_STROKE = "var(--color-on-surface-variant)";
-const ABSENT_TICK_PX = 6;
-const ISOLATED_DOT_R = 2;
 
 // ---------------------------------------------------------------------------
 // Metric overview line — one row of the collapsed summary
@@ -148,42 +144,20 @@ function MetricOverviewLine({
 function HrMetricCard({
   metric,
   result,
-  activeWindow,
-  lastSyncedAtMs,
+  lastSyncedAt,
 }: {
   metric: HrMetric;
   result: HrTrendResult;
-  activeWindow: HrWindow;
-  lastSyncedAtMs: number | null;
+  lastSyncedAt: string | null;
 }) {
   const cfg = METRIC_CONFIG[metric];
   const { points, stats } = result;
 
-  // Gaps for THIS metric (RHR and HRV have separate ones). Today's slot is not
-  // pending here: a reading dated today can exist, so absenceLabel decides.
-  const values = points.map((p) => p[cfg.dataKey]);
-  const gaps = buildGapModel(values);
-  const bridgeValues = gaps.bridges.map((b) => bridgeSeriesValues(values, b));
-  // The solid line already marks every present point except in the 90-day view.
-  const isolated = new Set(activeWindow === "90d" ? isolatedPresentIndices(values) : []);
-
-  const chartData = points.map((p, i) => {
-    const row: Record<string, number | string | null> = {
-      date:             p.date,
-      displayDate:      formatDateMMDD(p.date),
-      restingHeartRate: p.restingHeartRate,
-      hrv:              p.hrv,
-      // Baseline tick anchor on the hidden 0..1 axis, so it never moves the main domain.
-      absentTick:       values[i] === null ? 0 : null,
-      isolatedDot:      isolated.has(i) ? values[i] : null,
-    };
-    bridgeValues.forEach((vals, k) => { row[`bridge${k}`] = vals[i]; });
-    return row;
-  });
-
-  const tickIndices = selectTrendTicks(chartData.length, TICK_TARGET);
-
+  const series: SeriesPoint[] = points.map((p) => ({ date: p.date, value: p[cfg.dataKey] }));
   const avgValue = cfg.getAvg(stats);
+  // Baseline = the window average, the dashed line this card always drew.
+  const baseline = avgValue !== null ? series.map(() => avgValue) : undefined;
+
   const minValue = cfg.getMin(stats);
   const maxValue = cfg.getMax(stats);
   const nights   = cfg.getNights(stats);
@@ -205,140 +179,20 @@ function HrMetricCard({
           {cfg.emptyMsg}
         </div>
       ) : (
-        <div style={{ height: 200 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData}
-              margin={{ top: 6, right: 10, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="4 4" stroke="#f6f4ea" vertical={false} />
-              <XAxis
-                dataKey="displayDate"
-                stroke="#787869"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                style={{ fontFamily: "var(--font-sans)" }}
-                interval={0}
-                tickFormatter={(value, index) => tickIndices.has(index) ? value : ""}
-              />
-              <YAxis
-                width={Y_AXIS_W}
-                stroke="#787869"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                style={{ fontFamily: "var(--font-sans)" }}
-                domain={["auto", "auto"]}
-              />
-              <YAxis yAxisId="gap" hide width={0} domain={[0, 1]} />
-              <Tooltip
-                content={({ active, label }) => {
-                  if (!active) return null;
-                  const row = chartData.find((r) => r.displayDate === label);
-                  if (!row) return null;
-                  const v = row[cfg.dataKey];
-                  const text = v !== null
-                    ? `${cfg.seriesLabel} : ${v} ${cfg.unit}`
-                    : absenceText(absenceLabel(String(row.date), { today: localToday(), lastSyncedAtMs, nowMs: Date.now() }));
-                  return (
-                    <div style={{ backgroundColor: "#1c1c16", borderRadius: 8, padding: "10px 12px" }}>
-                      <p style={{ color: "#ffffff", fontFamily: "var(--font-display)", fontWeight: "bold", margin: 0 }}>{label}</p>
-                      <p style={{ color: "#e5e2d9", fontFamily: "var(--font-sans)", margin: "4px 0 0" }}>{text}</p>
-                    </div>
-                  );
-                }}
-              />
-              {avgValue !== null && (
-                <ReferenceLine
-                  y={avgValue}
-                  stroke="#9ca3af"
-                  strokeDasharray="5 4"
-                  strokeWidth={1.25}
-                  label={{
-                    value: `avg ${avgValue} ${cfg.unit}`,
-                    position: "insideTopRight",
-                    fontSize: 11,
-                    fill: "#9ca3af",
-                    fontFamily: "var(--font-sans)",
-                  }}
-                />
-              )}
-              {/* One two-point dotted segment per bridge, under the solid line. */}
-              {bridgeValues.map((_, k) => (
-                <Line
-                  key={`bridge${k}`}
-                  dataKey={`bridge${k}`}
-                  type="linear"
-                  stroke={GAP_STROKE}
-                  strokeWidth={1.5}
-                  strokeDasharray="2 4"
-                  strokeLinecap="round"
-                  dot={false}
-                  activeDot={false}
-                  connectNulls
-                  isAnimationActive={false}
-                  legendType="none"
-                />
-              ))}
-              <Line
-                type="monotone"
-                dataKey={cfg.dataKey}
-                stroke="var(--color-heart-accent)"
-                strokeWidth={2}
-                dot={activeWindow === "90d"
-                  ? false
-                  : (dotProps: DotItemDotProps) => {
-                      const { cx, cy, value, index } = dotProps;
-                      if (value == null || cx == null || cy == null) return null;
-                      return (
-                        <circle
-                          key={index}
-                          cx={cx}
-                          cy={cy}
-                          r={3.5}
-                          fill="#ffffff"
-                          style={{ stroke: "var(--color-heart-accent)" }}
-                          strokeWidth={2}
-                        />
-                      );
-                    }
-                }
-                activeDot={{ r: 5, style: { fill: "var(--color-heart-accent)" }, stroke: "#ffffff", strokeWidth: 2 }}
-                connectNulls={false}
-              />
-              {/* Baseline tick at every absent day. */}
-              <Line
-                yAxisId="gap"
-                dataKey="absentTick"
-                stroke="none"
-                activeDot={false}
-                isAnimationActive={false}
-                legendType="none"
-                dot={({ cx, cy, index }) =>
-                  cx == null || cy == null ? <g key={index} /> : (
-                    <line key={index} x1={cx} x2={cx} y1={cy - ABSENT_TICK_PX} y2={cy} stroke={GAP_STROKE} strokeWidth={1.5} strokeLinecap="round" />
-                  )
-                }
-              />
-              {/* 90-day view draws no per-point dots: give an isolated score an anchor. */}
-              <Line
-                dataKey="isolatedDot"
-                stroke="none"
-                activeDot={false}
-                isAnimationActive={false}
-                legendType="none"
-                dot={({ cx, cy, index }) =>
-                  cx == null || cy == null ? <g key={index} /> : <circle key={index} cx={cx} cy={cy} r={ISOLATED_DOT_R} fill="var(--color-heart-accent)" />
-                }
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {nights > 0 && (gaps.bridges.length > 0 || gaps.absentIndices.length > 0) && (
-        <p className="mt-3 text-xs text-on-surface-variant">Dotted line or gray tick: no reading that day.</p>
+        <GapTrendChart
+          points={series}
+          baseline={baseline}
+          seriesLabel={cfg.seriesLabel}
+          unit={cfg.unit}
+          color={cfg.color}
+          fillColor={cfg.fillColor}
+          gradientId={`hrGradient-${metric}`}
+          domain={cfg.domain}
+          todayIsPending={false}
+          lastSyncedAt={lastSyncedAt}
+          height={200}
+          margin={{ top: 6, right: 10, left: 0, bottom: 0 }}
+        />
       )}
 
       {/* Stat row */}
@@ -413,7 +267,6 @@ export default function HrTrendChart({ summaries, lastSyncedAt = null }: Props) 
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const lastSyncedAtMs = lastSyncedAt ? Date.parse(lastSyncedAt) : null;
   const result = calculateHrTrends(summaries, activeWindow, localToday());
   const { stats } = result;
 
@@ -454,9 +307,9 @@ export default function HrTrendChart({ summaries, lastSyncedAt = null }: Props) 
         ))}
       </div>
 
-      <HrMetricCard metric="rhr" result={result} activeWindow={activeWindow} lastSyncedAtMs={lastSyncedAtMs} />
+      <HrMetricCard metric="rhr" result={result} lastSyncedAt={lastSyncedAt} />
       <div className="my-8 border-t border-outline-variant/50" />
-      <HrMetricCard metric="hrv" result={result} activeWindow={activeWindow} lastSyncedAtMs={lastSyncedAtMs} />
+      <HrMetricCard metric="hrv" result={result} lastSyncedAt={lastSyncedAt} />
     </>
   );
 

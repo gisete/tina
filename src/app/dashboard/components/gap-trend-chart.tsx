@@ -20,7 +20,8 @@ import type { SeriesPoint } from "@/lib/analytics/hr-trends";
 import { localToday } from "@/lib/dates";
 import { formatDateMMDD } from "@/lib/format";
 import { selectTrendTicks } from "@/lib/charts/trend-ticks";
-import { fitDomain, type FitDomainOptions } from "@/lib/charts/trend-domain";
+import type { FitDomainOptions } from "@/lib/charts/trend-domain";
+import { buildTrendRows, fitTrendDomain, tooltipLines } from "@/lib/charts/gap-trend-model";
 import { absenceLabel, absenceText, bridgeSeriesValues, buildGapModel, isolatedPresentIndices, pendingTodayIndex } from "@/lib/charts/data-gaps";
 
 const TICK_TARGET = 7;
@@ -35,14 +36,16 @@ interface Props {
   points: SeriesPoint[];
   /**
    * Optional baseline per day, parallel to `points` (null = none that day). Drawn as a
-   * light dashed line with connectNulls; shown in the tooltip. Never part of the y-domain.
+   * light dashed line with connectNulls; shown in the tooltip (also on days with no
+   * actual reading). Joins the y-domain so it is never clipped, but never affects
+   * bridges, ticks or isolated dots.
    */
   baseline?: (number | null)[];
   /** Tooltip label for the series, e.g. "Sleep Score". */
   seriesLabel: string;
   /** Appended to tooltip values ("bpm"); empty for unitless. */
   unit?: string;
-  /** Line and anchor-dot colour. */
+  /** Line and anchor-dot colour. A CSS value; var(--token) is fine (applied via style, not SVG attributes). */
   color: string;
   /** Top-of-gradient fill colour (fades to transparent). */
   fillColor: string;
@@ -77,33 +80,23 @@ export default function GapTrendChart({
   const isolated = new Set(isolatedPresentIndices(values));
   const lastSyncedAtMs = lastSyncedAt ? Date.parse(lastSyncedAt) : null;
 
-  const present = values.filter((v): v is number => v !== null);
-  const [domainMin, domainMax] = fitDomain(
-    present.length > 0 ? Math.min(...present) : null,
-    present.length > 0 ? Math.max(...present) : null,
-    domain,
-  );
+  const [domainMin, domainMax] = fitTrendDomain(values, baseline, domain);
 
   const bridgeValues = gaps.bridges.map((b) => bridgeSeriesValues(values, b));
 
-  const chartData = points.map((p, i) => {
-    const row: Record<string, number | string | boolean | null> = {
-      date:        p.date,
-      displayDate: formatDateMMDD(p.date),
-      value:       p.value,
-      // Baseline tick anchor: only absent days carry a value, pinned to the axis floor.
-      absentTick:  p.value === null && i !== pendingIdx ? domainMin : null,
-      // Anchor dot only for a score with no solid-line neighbour (nothing else would draw it).
-      isolatedDot: isolated.has(i) ? p.value : null,
-      pending:     i === pendingIdx,
-    };
-    if (baseline) row.baseline = baseline[i] ?? null;
-    bridgeValues.forEach((vals, k) => { row[`bridge${k}`] = vals[i]; });
-    return row;
+  const chartData = buildTrendRows({
+    dates: points.map((p) => p.date),
+    displayDates: points.map((p) => formatDateMMDD(p.date)),
+    values,
+    baseline,
+    pendingIdx,
+    isolated,
+    domainMin,
+    bridgeValues,
   });
 
   const tickIndices = selectTrendTicks(chartData.length, TICK_TARGET);
-  const valueText = (v: number) => (unit ? `${v} ${unit}` : `${v}`);
+  const lastIdx = chartData.length - 1;
 
   return (
     <>
@@ -112,8 +105,8 @@ export default function GapTrendChart({
           <ComposedChart data={chartData} margin={margin}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor={fillColor} stopOpacity={0.8} />
-                <stop offset="95%" stopColor={fillColor} stopOpacity={0.0} />
+                <stop offset="5%"  style={{ stopColor: fillColor }} stopOpacity={0.8} />
+                <stop offset="95%" style={{ stopColor: fillColor }} stopOpacity={0.0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="4 4" stroke="#f6f4ea" vertical={false} />
@@ -125,7 +118,19 @@ export default function GapTrendChart({
               axisLine={false}
               style={{ fontFamily: "var(--font-sans)" }}
               interval={0}
-              tickFormatter={(value, index) => tickIndices.has(index) ? value : ""}
+              tick={({ x, y, payload, index }) => (
+                <text
+                  x={x}
+                  y={Number(y) + 12}
+                  fontSize={12}
+                  fill="#787869"
+                  // The last label is end-anchored so it is not clipped by the plot's right edge.
+                  textAnchor={index === lastIdx ? "end" : "middle"}
+                  style={{ fontFamily: "var(--font-sans)" }}
+                >
+                  {tickIndices.has(index) ? payload.value : ""}
+                </text>
+              )}
             />
             <YAxis
               domain={[domainMin, domainMax]}
@@ -140,11 +145,11 @@ export default function GapTrendChart({
                 if (!active) return null;
                 const row = chartData.find((r) => r.displayDate === label);
                 if (!row || row.pending) return null;
-                const v = row.value;
-                const text = v !== null
-                  ? `${seriesLabel} : ${valueText(v as number)}`
-                  : absenceText(absenceLabel(String(row.date), { today: localToday(), lastSyncedAtMs, nowMs: Date.now() }));
-                const base = v !== null && row.baseline != null ? `Baseline : ${valueText(row.baseline as number)}` : null;
+                const { text, baseline: base } = tooltipLines(row, seriesLabel, unit, {
+                  today: localToday(),
+                  lastSyncedAtMs,
+                  nowMs: Date.now(),
+                });
                 return (
                   <div style={{ backgroundColor: "#1c1c16", borderRadius: 8, padding: "10px 12px" }}>
                     <p style={{ color: "#ffffff", fontFamily: "var(--font-display)", fontWeight: "bold", margin: 0 }}>{label}</p>
@@ -172,6 +177,7 @@ export default function GapTrendChart({
               type="monotone"
               dataKey="value"
               stroke={color}
+              style={{ stroke: color }}
               strokeWidth={2}
               fillOpacity={1}
               fill={`url(#${gradientId})`}
@@ -225,7 +231,7 @@ export default function GapTrendChart({
               isAnimationActive={false}
               legendType="none"
               dot={({ cx, cy, index }) =>
-                cx == null || cy == null ? <g key={index} /> : <circle key={index} cx={cx} cy={cy} r={ISOLATED_DOT_R} fill={color} />
+                cx == null || cy == null ? <g key={index} /> : <circle key={index} cx={cx} cy={cy} r={ISOLATED_DOT_R} style={{ fill: color }} />
               }
             />
           </ComposedChart>
