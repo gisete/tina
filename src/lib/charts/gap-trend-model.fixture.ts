@@ -31,7 +31,7 @@ const bridgeValues = gaps.bridges.map((b) => bridgeSeriesValues(values, b));
 const base = { dates, displayDates: dates, values, pendingIdx: null, isolated: iso, domainMin: 50, bridgeValues };
 const withB = buildTrendRows({ ...base, baseline });
 const noB = buildTrendRows(base);
-const strip = (r: Record<string, unknown>) => { const { baseline: _b, ...rest } = r; return rest; };
+const strip = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "baseline"));
 assert(eq(withB.map(strip), noB.map(strip)), "rows other than `baseline` identical with/without baseline");
 
 // (b2) connectNulls input: baseline nulls are preserved as null (recharts draws across them).

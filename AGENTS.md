@@ -44,4 +44,14 @@ Follow these when writing new code. They reflect how the codebase is organized t
 
 ## Verification
 
-- Before considering a change done: `npx tsc --noEmit` and `npm run build` must pass. For logic changes, spot-check the pure functions with a quick `npx tsx` script against realistic fixtures.
+- Before considering a change done: `npm run check` must pass (`tsc --noEmit`, lint with zero warnings, `npm run build`, every `*.fixture.ts` via tsx). For logic changes, spot-check the pure functions with a quick `npx tsx` script against realistic fixtures.
+
+# Autonomous work rules
+
+Applies when working through `docs/plan.md` unattended.
+
+- Work tasks in plan order. A task is done only when `npm run check` passes, the `code-reviewer` subagent has reviewed the diff, and it is committed as one commit with the task number in the message. Then update `docs/plan.md` and `docs/progress.md`.
+- STOP the task, mark it `blocked: <question>` in `docs/plan.md`, and move to the next task that doesn't depend on it, if the task would: alter an existing table or column (brand-new tables are allowed; note them in progress.md); change any score or metric math; add a Google API call anywhere outside the sync path; write to the real database outside the sync path; or hit an ambiguity the plan doesn't settle. Also stop after two failed attempts to make `check` pass.
+- Verification against the real database is read-only, always. Dev and prod share this database.
+- Never print, cat, or log any `.env` file or token value.
+- Never use `toISOString()` or `.split("T")[0]` for calendar dates. Instants in API output are ISO 8601 with offset; calendar dates are local `YYYY-MM-DD` strings from the existing helpers.

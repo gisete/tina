@@ -89,6 +89,8 @@ export default function NightHeartChart({
       map.set(p.timestamp, color);
     }
     return map;
+  // `layout` is rebuilt every render; keying on its points is the intended memo boundary.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout?.points, timeline, gradientStops.length]);
 
   const hasStages = gradientStops.length > 0;

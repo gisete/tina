@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   calculateSeriesTrend,
@@ -31,6 +32,7 @@ const PILL_ACTIVE   = "bg-on-surface text-white";
 const PILL_INACTIVE = "bg-surface-container text-on-surface-variant hover:bg-surface-container-high";
 
 export default function SleepCharts({ data, lastSyncedAt = null }: { data: ScorePoint[]; lastSyncedAt?: string | null }) {
+  const [nowMs]      = useState(() => Date.now());
   const router       = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
@@ -81,6 +83,7 @@ export default function SleepCharts({ data, lastSyncedAt = null }: { data: Score
         domain={SLEEP_SCORE_DOMAIN}
         todayIsPending
         lastSyncedAt={lastSyncedAt}
+        nowMs={nowMs}
       />
     </NeutralCard>
   );

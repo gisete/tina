@@ -3,7 +3,7 @@
 import { config } from "dotenv"; config({ path: ".env.local" });
 import { db } from "@/db/client";
 import { users, sleepSessions } from "@/db/schema";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { runSyncStep } from "@/lib/sync/step";
 
 async function main(): Promise<void> {

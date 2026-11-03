@@ -14,7 +14,7 @@ config({ path: ".env.local" });
 
 import { db } from "@/db/client";
 import { sleepSessions, heartRateSamples } from "@/db/schema";
-import { eq, and, gte, lte, asc, desc } from "drizzle-orm";
+import { eq, and, gte, lte, asc } from "drizzle-orm";
 import { calculateHolisticSleepScore } from "@/lib/analytics/sleep/score";
 import { calculateDeepSleepContinuity } from "@/lib/analytics/sleep/continuity";
 import { calculateRestlessness, computeDisruptionIndex } from "@/lib/analytics/sleep/restlessness";

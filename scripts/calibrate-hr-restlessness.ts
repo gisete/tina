@@ -12,7 +12,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { db } from "@/db/client";
-import { sleepSessions, sleepStages, heartRateSamples } from "@/db/schema";
+import { sleepSessions, heartRateSamples } from "@/db/schema";
 import { eq, and, gte, lte, asc } from "drizzle-orm";
 import {
   detectHrRestlessness,

@@ -524,11 +524,6 @@ async function main(): Promise<void> {
     console.log(`TYPE: ${rt.id}`);
     console.log(`${"─".repeat(60)}`);
 
-    // dailyRollUp and rollUp are POST methods with a JSON body (not GET with query params).
-    // Date body uses the civil date object shape seen in the raw records.
-    const startDate = { year: Number(rollFrom.slice(0,4)), month: Number(rollFrom.slice(5,7)), day: Number(rollFrom.slice(8,10)) };
-    const endDate   = { year: Number(rollToExcl.slice(0,4)), month: Number(rollToExcl.slice(5,7)), day: Number(rollToExcl.slice(8,10)) };
-
     interface RollupAttempt {
       label:   string;
       action:  string;

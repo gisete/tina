@@ -11,7 +11,6 @@ import type { SleepStageInterval } from "./types";
 
 /** Strict boundary: awake intervals shorter than this are restlessness, not awakenings. */
 export const RESTLESS_MAX_MINUTES = 5;
-const RESTLESS_MAX_MS = RESTLESS_MAX_MINUTES * 60_000;
 
 // Disruption index penalties — exported so assemble.ts can recompute when
 // HR-derived restless events are merged with stage-derived awakenings.

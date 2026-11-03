@@ -160,6 +160,7 @@ interface Props {
 }
 
 export default function RecoveryBalanceChart({ summaries, lastSyncedAt = null }: Props) {
+  const [nowMs]      = useState(() => Date.now());
   const router       = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
@@ -197,7 +198,7 @@ export default function RecoveryBalanceChart({ summaries, lastSyncedAt = null }:
   const hrvBridges = hrvSeries.baselineReady ? geo.hrvBridges : [];
   const lastSyncedAtMs = lastSyncedAt ? Date.parse(lastSyncedAt) : null;
   const gapDrawn = rhrBridges.length + hrvBridges.length + geo.bothAbsentIndices.length > 0;
-  const absence = (date: string) => absenceText(absenceLabel(date, { today, lastSyncedAtMs, nowMs: Date.now() }));
+  const absence = (date: string) => absenceText(absenceLabel(date, { today, lastSyncedAtMs, nowMs }));
 
   const span    = geo.yMax - geo.yMin;
   const toYFrac = (z: number) => (geo.yMax - z) / span;

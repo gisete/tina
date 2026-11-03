@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   calculateHrTrends,
@@ -145,10 +146,12 @@ function HrMetricCard({
   metric,
   result,
   lastSyncedAt,
+  nowMs,
 }: {
   metric: HrMetric;
   result: HrTrendResult;
   lastSyncedAt: string | null;
+  nowMs: number;
 }) {
   const cfg = METRIC_CONFIG[metric];
   const { points, stats } = result;
@@ -190,6 +193,7 @@ function HrMetricCard({
           domain={cfg.domain}
           todayIsPending={false}
           lastSyncedAt={lastSyncedAt}
+          nowMs={nowMs}
           height={200}
           margin={{ top: 6, right: 10, left: 0, bottom: 0 }}
         />
@@ -254,6 +258,7 @@ interface Props {
 }
 
 export default function HrTrendChart({ summaries, lastSyncedAt = null }: Props) {
+  const [nowMs]      = useState(() => Date.now());
   const router       = useRouter();
   const pathname     = usePathname();
   const searchParams = useSearchParams();
@@ -307,9 +312,9 @@ export default function HrTrendChart({ summaries, lastSyncedAt = null }: Props) 
         ))}
       </div>
 
-      <HrMetricCard metric="rhr" result={result} lastSyncedAt={lastSyncedAt} />
+      <HrMetricCard metric="rhr" result={result} lastSyncedAt={lastSyncedAt} nowMs={nowMs} />
       <div className="my-8 border-t border-outline-variant/50" />
-      <HrMetricCard metric="hrv" result={result} lastSyncedAt={lastSyncedAt} />
+      <HrMetricCard metric="hrv" result={result} lastSyncedAt={lastSyncedAt} nowMs={nowMs} />
     </>
   );
 

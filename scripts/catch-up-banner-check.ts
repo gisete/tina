@@ -13,7 +13,7 @@ const running = (unit: "recent" | "gap", from: string, to: string, d: number, t:
 
 // 1. Plain recent sync: hidden under 2s, inline "Syncing…" after, nothing at idle.
 {
-  let s = initialLoopState(T0);
+  const s = initialLoopState(T0);
   assert.deepEqual(bannerView(s, T0 + SHOW_AFTER_MS - 1), { kind: "hidden" });
   assert.deepEqual(bannerView(s, T0 + SHOW_AFTER_MS), { kind: "inline", label: "Syncing…" });
   let st = applyResult(s, running("recent", "2026-10-18", "2026-10-21", 0, 0), T0 + 500);

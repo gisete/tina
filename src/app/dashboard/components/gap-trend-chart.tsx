@@ -22,7 +22,7 @@ import { formatDateMMDD } from "@/lib/format";
 import { selectTrendTicks } from "@/lib/charts/trend-ticks";
 import type { FitDomainOptions } from "@/lib/charts/trend-domain";
 import { buildTrendRows, fitTrendDomain, tooltipLines } from "@/lib/charts/gap-trend-model";
-import { absenceLabel, absenceText, bridgeSeriesValues, buildGapModel, isolatedPresentIndices, pendingTodayIndex } from "@/lib/charts/data-gaps";
+import { bridgeSeriesValues, buildGapModel, isolatedPresentIndices, pendingTodayIndex } from "@/lib/charts/data-gaps";
 
 const TICK_TARGET = 7;
 
@@ -56,6 +56,8 @@ interface Props {
   todayIsPending: boolean;
   /** ISO timestamp of the last sync; decides "Not synced yet" vs "No reading" on recent absent days. */
   lastSyncedAt?: string | null;
+  /** Epoch ms "now", computed by the caller (a mount-time snapshot; keeps render pure); used with lastSyncedAt for the absence label. */
+  nowMs: number;
   height?: number;
   margin?: { top: number; right: number; left: number; bottom: number };
 }
@@ -71,6 +73,7 @@ export default function GapTrendChart({
   domain,
   todayIsPending,
   lastSyncedAt = null,
+  nowMs,
   height = 240,
   margin = { top: 6, right: 10, left: -30, bottom: 0 },
 }: Props) {
@@ -148,7 +151,7 @@ export default function GapTrendChart({
                 const { text, baseline: base } = tooltipLines(row, seriesLabel, unit, {
                   today: localToday(),
                   lastSyncedAtMs,
-                  nowMs: Date.now(),
+                  nowMs,
                 });
                 return (
                   <div style={{ backgroundColor: "#1c1c16", borderRadius: 8, padding: "10px 12px" }}>

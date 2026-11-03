@@ -10,7 +10,7 @@
  */
 import { db } from "@/db/client";
 import { users, sleepSessions } from "@/db/schema";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { fetchGoogleSleepData } from "@/lib/google/client";
 import { parseUtcOffsetSeconds } from "@/lib/google/normalizers";
 import { addDays, parseLocalDate } from "@/lib/dates";
