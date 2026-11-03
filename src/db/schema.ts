@@ -317,3 +317,24 @@ export const mealLogs = pgTable(
   },
   (t) => [uniqueIndex("meal_logs_user_id_date_meal_plan_item_id_idx").on(t.userId, t.date, t.mealPlanItemId)]
 );
+
+/**
+ * Bearer tokens for the agent-facing /api/v1 API. Only the SHA-256 hash of a
+ * token is stored; the plaintext is shown once at creation (scripts/create-api-token.ts).
+ */
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    name: text("name").notNull(),
+    /** Lowercase hex SHA-256 of the plaintext token. */
+    tokenHash: text("token_hash").notNull(),
+    /** Subset of "read" | "sync". */
+    scopes: text("scopes").array().notNull().$type<("read" | "sync")[]>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at"),
+    revokedAt: timestamp("revoked_at"),
+  },
+  (t) => [uniqueIndex("api_tokens_token_hash_idx").on(t.tokenHash)],
+);

@@ -55,3 +55,11 @@ Secondary finding: 2026-10-16 has light 0 with 9,421 steps — zone data was mis
 **Proposed fix (not applied).** (1) Confirm with one raw response (below). (2) Stop deriving AZM from Karvonen zone minutes: fetch the API's own active-zone-minutes data type (per-day total, via `dailyRollUp` if supported, else the interval points) and store/read that number; keep zone minutes only as an HR-intensity breakdown, labelled as Google zones. (3) Or, if zones must stay the source, fetch `daily-heart-rate-zones` and re-bucket minute HR against Fitbit's thresholds — more work and the least faithful to what the Fitbit app shows. Recommend (2). Either is a change to the zone mapping/metric math, so it needs your go-ahead.
 
 **To confirm:** one raw `time-in-heart-rate-zone` page plus the day's `daily-heart-rate-zones` and an active-zone-minutes sample for a day where the app showed AZM > 0. Needs a Google call outside the sync path (see the plan.md question).
+
+## Task 5 — agent authentication (commit: see git log --grep "Task 5")
+- New table `api_tokens` (brand new; id, user_id, name, token_hash unique, scopes text[], created_at, last_used_at, revoked_at) in schema.ts. **Not pushed** — the table does not exist in the live DB yet.
+- `src/lib/api/token.ts`: `hashToken` (SHA-256 hex), `extractBearer`, `verifyApiToken` (order: missing → invalid → revoked → insufficient_scope; constant-time hash compare), `TokenRecord`/`TokenVerdict` types; fixture covers every branch and the ordering.
+- `scripts/create-api-token.ts <name> <read,sync> [email]` (prints plaintext once, stores the hash) and `scripts/revoke-api-token.ts <uuid>`. **Neither was run.**
+- Middleware: there is no Auth.js middleware/proxy file in the repo (checked `middleware.*`/`proxy.*` in src and root; Next 16 would call it `proxy.ts`), so nothing redirects `/api/v1/*` to login. `/api/v1` routes will authenticate by Bearer only. Re-check if a proxy is ever added.
+- Verified: `npm run check`; code-reviewer: no blocking findings.
+- **Needs you:** (1) `npx drizzle-kit push` — creates `api_tokens` and applies the Task 3 AZM nullable change (review the Task 3 diff first). (2) `npx tsx scripts/create-api-token.ts agent read,sync`. (3) Put the printed token in `.env.local` as `TINA_API_TOKEN` (I never print or read that file).

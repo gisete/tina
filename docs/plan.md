@@ -30,7 +30,7 @@ Status: blocked: findings written (progress.md) from code, docs and stored data,
 `light_minutes` is ~1,270–1,430/day (≈ all worn time) while moderate/vigorous/peak are mostly 0. Diagnose the zone mapping from the code and a raw API response sample; report cause and proposed fix in progress.md. Do not change the mapping.
 
 ## Task 5 — Agent authentication
-Status: todo
+Status: done (code). USER ACTION: `npx drizzle-kit push` (creates api_tokens; also applies the Task 3 AZM nullability), then `npx tsx scripts/create-api-token.ts agent read,sync`, and put the printed token in .env.local as TINA_API_TOKEN.
 New table `api_tokens`: id, user_id, name, token_hash (SHA-256; plaintext never stored), scopes (text[] of "read" | "sync"), created_at, last_used_at, revoked_at. Pure verifier in `src/lib/api/` (hash compare, revoked check, scope check) with fixtures. `scripts/create-api-token.ts` (name + scopes; prints plaintext once, stores only the hash) and `scripts/revoke-api-token.ts`. Do not run either against the real DB — STOP and ask the user to create a token with scopes read,sync and put it in `.env.local` as `TINA_API_TOKEN`. The Auth.js middleware must not redirect `/api/v1/*` to login; those routes authenticate by Bearer token only.
 
 ## Task 6 — API contract
