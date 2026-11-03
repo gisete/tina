@@ -38,7 +38,7 @@ Status: done
 In `src/lib/api/`, pure TS response types and builders (primitives in, plain JSON out, no Next imports). One envelope: `{ apiVersion: "1", generatedAt (instant with offset), timezone, data }` on success, or `{ apiVersion: "1", error: { code, message } }` on failure, as a discriminated union. Every metric uses the Task 3 union, with its unit. Derived values (sleep score and breakdown, debt, restlessness est., cardiac strain) are computed live by the existing engines — reuse them, never reimplement or change their math.
 
 ## Task 7 — Read endpoints (scope "read")
-Status: todo
+Status: done (code + DB-level verification; HTTP end-to-end waits for the api_tokens push and a token)
 DB-only, no Google calls under any circumstance, including no lazy HR-sample fetch: sample-derived fields for a night without stored samples return unavailable/not_fetched.
 - `GET /api/v1/day?date=YYYY-MM-DD` (default today, local): main sleep session plus naps (reuse existing main-session selection), stages, sleep score and breakdown, night HR summary and estimated restlessness when samples exist, RHR, HRV, steps, AZM.
 - `GET /api/v1/days?from=&to=`: same per-day shape over a range, capped at 92 days (`range_too_large` beyond).
