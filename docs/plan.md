@@ -50,7 +50,7 @@ Status: done (code + stub-driven fixture; not called against Google — see prog
 `POST /api/v1/sync` runs the existing step function in a server-side loop, capped at 8 steps or 45 seconds, returns `{ status: "fresh" | "synced" | "pending" | "auth_required" | "error", stepsRun, syncedThrough, lastSyncedAt }`. If the 6-hour staleness rule says nothing is due and there is no gap, return "fresh" without calling Google. If the existing lock is held, return "pending". No other write endpoints.
 
 ## Task 9 — GET /api/v1/schema
-Status: todo
+Status: done
 Valid read token required. Machine-readable description of every endpoint, parameter, field, unit, and the meaning of each status and reason value, generated from or kept beside the contract types so it cannot drift silently. Field descriptions written for an AI reader: what each metric means and how it is estimated where relevant.
 
 ## Task 10 — Contract smoke test

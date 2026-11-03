@@ -9,3 +9,5 @@ export * from "./params";
 export * from "./windows";
 export * from "./sync-loop";
 export * from "./sync-response";
+export * from "./schema-doc";
+export * from "./validate";
