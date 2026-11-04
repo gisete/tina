@@ -5,7 +5,8 @@
 
 import { selectMainSessions, type CardiacStrain, type LastNightDetail, type NightHeartSummary, type SleepStageType } from "@/lib/analytics/sleep";
 import { dayMetric, classifyAbsence, type AbsenceContext } from "./absence";
-import { derived, estimated, measured, unavailable, type MetricValue, type UnavailableMetric } from "./metric";
+import { calculateActiveZoneMinutes } from "@/lib/analytics/activity";
+import { derived, estimated, measured, unavailable, type MetricValue } from "./metric";
 import { formatInstantWithOffset } from "./time";
 
 // ── Output types ───────────────────────────────────────────────────────────
@@ -85,8 +86,7 @@ export interface DayData {
   hrv: MetricValue;
   steps: MetricValue;
   /** Active zone minutes computed live from the stored zone minutes (see schema for caveats). */
-  /** Always unavailable / not_supported: the stored value is not trustworthy (see buildDayData). */
-  activeZoneMinutes: UnavailableMetric;
+  activeZoneMinutes: MetricValue;
   heartZoneMinutes: { light: MetricValue; moderate: MetricValue; vigorous: MetricValue; peak: MetricValue };
 }
 
@@ -228,6 +228,11 @@ export function buildDayData(input: DayInput): DayData {
 
   const zone = (v: number | null | undefined): MetricValue => dayMetric(v, "min", input.date, ctx, { accumulatesDuringDay: true });
 
+  const zones =
+    a !== null && a.light !== null && a.moderate !== null && a.vigorous !== null && a.peak !== null
+      ? { light: a.light, moderate: a.moderate, vigorous: a.vigorous, peak: a.peak }
+      : null;
+
   return {
     date: input.date,
     sleep: {
@@ -237,10 +242,12 @@ export function buildDayData(input: DayInput): DayData {
     restingHeartRate: dayMetric(input.restingHeartRate, "bpm", input.date, ctx),
     hrv: dayMetric(input.hrv, "ms", input.date, ctx),
     steps: dayMetric(a?.steps, "steps", input.date, ctx, { accumulatesDuringDay: true }),
-    // WITHHELD, deliberately: stored AZM is derived from Google's Karvonen zone minutes, which do not
-    // match Fitbit's AZM thresholds, so the number is wrong rather than merely approximate (docs/progress.md,
-    // Task 4). The stored data and calculateActiveZoneMinutes stay as they are; only the API stops exposing it.
-    activeZoneMinutes: unavailable("not_supported"),
+    // Same figure as the dashboard AZM card: calculateActiveZoneMinutes over the stored Karvonen zone
+    // minutes (moderate x1, vigorous/peak x2), so "derived". Matches Google's own AZM within ~2 min
+    // (docs/azm-probe/). Today's total is still accumulating.
+    activeZoneMinutes: zones
+      ? derived(calculateActiveZoneMinutes(zones), "min", input.date === input.today ? ["partial_day"] : undefined)
+      : unavailable(classifyAbsence(input.date, ctx)),
     heartZoneMinutes: { light: zone(a?.light), moderate: zone(a?.moderate), vigorous: zone(a?.vigorous), peak: zone(a?.peak) },
   };
 }

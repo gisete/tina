@@ -67,13 +67,13 @@ export const SCHEMA_DOC: SchemaDoc = {
     "Every response is JSON in one envelope: success {apiVersion, generatedAt, timezone, data}, failure {apiVersion, error:{code, message}}. Check for the 'error' key.",
     "Calendar dates are local YYYY-MM-DD strings in 'timezone' (the server's). Instants are ISO 8601 with a UTC offset.",
     "Every measurement and derived quantity is a metric object with a 'status'. Bookkeeping counts and weights (nights, stepsRun, score weights, stage minutes inside a stage list) are plain numbers (kind 'number'). Never treat a missing or unavailable value as zero: a measured 0 is a real zero, 'unavailable' means no value exists and 'reason' says why.",
-    "A calendar day D shows the night that ENDED the morning of D (the session whose nightOf is D minus 1), plus D's own resting heart rate, HRV, steps and heart-zone minutes (active zone minutes is present but always unavailable / not_supported).",
+    "A calendar day D shows the night that ENDED the morning of D (the session whose nightOf is D minus 1), plus D's own resting heart rate, HRV, steps and heart-zone minutes and active zone minutes.",
     "Read endpoints only read the database. They never trigger a sync or contact Google; use POST /api/v1/sync for that.",
   ],
   endpoints: [
     {
       method: "GET", path: "/api/v1/day", scope: "read", response: "day",
-      summary: "One calendar day: the night's main session and naps, stages, sleep score and breakdown, night heart summary, restlessness estimate, resting HR, HRV, steps and heart-zone minutes (active zone minutes is always unavailable / not_supported).",
+      summary: "One calendar day: the night's main session and naps, stages, sleep score and breakdown, night heart summary, restlessness estimate, resting HR, HRV, steps and heart-zone minutes and active zone minutes.",
       params: [{ name: "date", required: false, type: "YYYY-MM-DD", description: "Calendar day. Defaults to today in the server's timezone." }],
     },
     {
@@ -188,7 +188,7 @@ export const SCHEMA_DOC: SchemaDoc = {
       restingHeartRate: M("Resting heart rate for this calendar day (the daily value the device reports).", "bpm"),
       hrv: M("Overnight HRV (RMSSD) for this calendar day.", "ms"),
       steps: M("Step total for the day. For today it is flagged partial_day.", "steps"),
-      activeZoneMinutes: M("ALWAYS unavailable with reason not_supported, and never carries a value. Tina does not expose active zone minutes: the stored figure is derived from Google's per-day Karvonen heart-rate zones, which do not match Fitbit's AZM thresholds, so it would be wrong. Do not infer AZM from heartZoneMinutes either.", "min"),
+      activeZoneMinutes: M("Active zone minutes, the same figure as the dashboard card: computed from Google's per-day Karvonen zone minutes (moderate x1, vigorous and peak x2; light does not count). It matches Google's own active-zone-minutes data within about 2 minutes, not exactly (checked on 12 sampled days), so treat it as an estimate-grade figure. Unavailable when the day has no stored zone minutes. Today's value carries the partial_day flag.", "min"),
       "heartZoneMinutes.light": M("Minutes in the 'light' zone of Google's per-day Karvonen heart-rate zones (computed from that day's resting and maximum heart rate), NOT Fitbit's fat-burn/cardio/peak zones, so the names and thresholds do not match the Fitbit app. 'Light' is the lowest zone and covers most worn time by design (ordinary walking and resting-but-awake time fall in it), so a large value is expected; it is not an activity measure. Today's zone minutes carry the partial_day flag.", "min"),
       "heartZoneMinutes.moderate": M("Minutes in the 'moderate' zone of Google's per-day Karvonen heart-rate zones (computed from that day's resting and maximum heart rate), NOT Fitbit's fat-burn/cardio/peak zones, so the names and thresholds do not match the Fitbit app. Today's value carries the partial_day flag.", "min"),
       "heartZoneMinutes.vigorous": M("Minutes in the 'vigorous' zone of Google's per-day Karvonen heart-rate zones (computed from that day's resting and maximum heart rate), NOT Fitbit's fat-burn/cardio/peak zones, so the names and thresholds do not match the Fitbit app. Today's value carries the partial_day flag.", "min"),

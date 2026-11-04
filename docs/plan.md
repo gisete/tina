@@ -26,7 +26,7 @@ In `src/lib/api/` (pure TS) define a discriminated union for every exposed metri
 Absence is decided by the sync cursor: a date on or before `synced_through` with no data is `not_worn`; after it, `not_synced`; today's partial values are measured but flagged `partial_day` where relevant. Add a pure classifier with fixtures. Make the AZM columns on `daily_activity_summaries` nullable (drop DEFAULT 0) so absence stops reading as zero. This alters an existing table: write the change, show the schema diff, and STOP before `drizzle-kit push`.
 
 ## Task 4 — AZM light-minutes investigation (read-only)
-Status: blocked: findings written (progress.md) from code, docs and stored data, but no raw API sample — OK to run a one-off read-only script that calls the existing zone fetch (and `daily-heart-rate-zones`) for one day? It is a Google call outside the sync path and may refresh the OAuth token (a write to the `account` table).
+Status: done — the zone-mapping theory was disproved by the Task 12 probes (see progress.md correction).
 `light_minutes` is ~1,270–1,430/day (≈ all worn time) while moderate/vigorous/peak are mostly 0. Diagnose the zone mapping from the code and a raw API response sample; report cause and proposed fix in progress.md. Do not change the mapping.
 
 ## Task 5 — Agent authentication
@@ -58,11 +58,15 @@ Status: done (skips without TINA_API_TOKEN; not yet run against a live server �
 Added to `npm run check`, skipped with a clear message if `TINA_API_TOKEN` is absent. Starts nothing itself; expects the dev server running. Calls every read endpoint (day for today, yesterday, and a date before synced history begins; days for a 7-day and an over-cap range; state; schema), validates each response against the contract types at runtime, and asserts: over-cap range returns `range_too_large`; a date with no data returns unavailable values with a reason (never 0); the API sleep score for 3 recent nights equals the dashboard's. Must not call `/api/v1/sync`.
 
 ## Task 11 — Honest zone data in the API (withhold AZM, label heart zones)
-Status: done
+Status: done (the AZM withholding half was reverted by Task 12c; the heartZoneMinutes half stands)
 `heartZoneMinutes` stays `measured`, but its schema description says these are Google's per-day Karvonen heart-rate zones, not Fitbit's fat-burn/cardio/peak zones, and that `light` covers most worn time by design. `activeZoneMinutes` is withheld: `/api/v1/day` and `/api/v1/days` return `status: "unavailable", reason: "not_supported"` with no value, and the schema doc says the same. Stored AZM data and the metric math (`calculateActiveZoneMinutes`, the dashboard's AZM card) are untouched.
 
 ## Task 12 — Real active zone minutes from Google (PLAN ONLY)
 Status: closed: not a bug — the derived AZM matches Google's active-zone-minutes dailyRollUp within ±2 min on all 12 sampled days, so no new table and no backfill (probe data: 7311f33, plus 6e420ae).
+
+## Task 12c — Revert the Task 11 AZM withholding
+Status: done
+`activeZoneMinutes` is `status: "derived"` again, with its value from `calculateActiveZoneMinutes` (same as the dashboard card). The schema doc says it is computed from Google's per-day Karvonen zone minutes (moderate x1, vigorous/peak x2) and matches Google's own AZM within about 2 minutes, not exactly. Fixtures and smoke test updated. The Task 11 `heartZoneMinutes` descriptions stay.
 
 Rules for Tasks 13–18: AGENTS.md conventions, local-timezone date helpers only, no `any`, one commit per task, done only when `npm run check` passes and `code-reviewer` has reviewed it. Do not begin Task 13 until Task 12 is approved and committed.
 
