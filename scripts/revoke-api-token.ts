@@ -1,7 +1,6 @@
 // Usage: npx tsx scripts/revoke-api-token.ts <token-id>
 // Marks the token revoked (kept for audit; it can no longer authenticate).
-import { config } from "dotenv";
-config({ path: ".env.local" });
+import "./_load-env";
 
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db/client";

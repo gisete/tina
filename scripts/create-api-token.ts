@@ -2,8 +2,7 @@
 //   scopes: comma-separated subset of read,sync   e.g. read,sync
 //   email:  owner's email; optional when exactly one user exists.
 // Prints the plaintext token ONCE. Only its SHA-256 hash is stored.
-import { config } from "dotenv";
-config({ path: ".env.local" });
+import "./_load-env";
 
 import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
