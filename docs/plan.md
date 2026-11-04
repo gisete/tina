@@ -56,3 +56,7 @@ Valid read token required. Machine-readable description of every endpoint, param
 ## Task 10 — Contract smoke test
 Status: done (skips without TINA_API_TOKEN; not yet run against a live server — see progress.md)
 Added to `npm run check`, skipped with a clear message if `TINA_API_TOKEN` is absent. Starts nothing itself; expects the dev server running. Calls every read endpoint (day for today, yesterday, and a date before synced history begins; days for a 7-day and an over-cap range; state; schema), validates each response against the contract types at runtime, and asserts: over-cap range returns `range_too_large`; a date with no data returns unavailable values with a reason (never 0); the API sleep score for 3 recent nights equals the dashboard's. Must not call `/api/v1/sync`.
+
+## Task 11 — Honest zone data in the API (withhold AZM, label heart zones)
+Status: done
+`heartZoneMinutes` stays `measured`, but its schema description says these are Google's per-day Karvonen heart-rate zones, not Fitbit's fat-burn/cardio/peak zones, and that `light` covers most worn time by design. `activeZoneMinutes` is withheld: `/api/v1/day` and `/api/v1/days` return `status: "unavailable", reason: "not_supported"` with no value, and the schema doc says the same. Stored AZM data and the metric math (`calculateActiveZoneMinutes`, the dashboard's AZM card) are untouched.

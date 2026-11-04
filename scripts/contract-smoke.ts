@@ -63,6 +63,9 @@ function dayChecks(name: string, day: Json | null): void {
   for (const e of validateMetricShapes(day)) failures.push(`${name}: ${e}`);
   for (const e of validateAgainstDoc(name, SCHEMA_DOC.responses.day, [day], { requireAll: false })) failures.push(e);
   checks += 2;
+  const azm = (day as { activeZoneMinutes?: { status?: string; reason?: string } }).activeZoneMinutes;
+  if (azm?.status !== "unavailable" || azm.reason !== "not_supported" || "value" in azm) failures.push(`${name}: activeZoneMinutes must be unavailable / not_supported with no value`);
+  checks += 1;
 }
 
 type Obj = { [k: string]: Json };
