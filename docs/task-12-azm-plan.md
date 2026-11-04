@@ -1,5 +1,7 @@
 # Task 12 — AZM fix plan (PLAN ONLY, awaiting approval, no code written)
 
+> **NOT USED.** Task 12 was closed as not a bug: the probes (docs/azm-probe/) showed the derived AZM matches Google's own active-zone-minutes within ±2 min on all 12 sampled days. No table, backfill or sync change was made. Kept for the record only.
+
 ## Evidence base (read this first)
 There is **no `docs/azm-probe/`**. Task 4 never ran a probe: it stayed blocked on approval for a Google call outside the sync path, so its findings come from code, Google's published reference and stored data. Everything below about the Google response is therefore from documentation, **not** a raw sample. Step 0 below closes that gap before any code is written.
 
