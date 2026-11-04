@@ -67,3 +67,30 @@ Status: plan approved (raw sample: yes; new table + push: yes once the sample co
 ## Task 12b — Switch the dashboard AZM card and the API to the new table
 Status: pending — starts only after the Task 12 backfill is verified.
 Point `activeZoneMinutes` in `/api/v1/day` and `/days` and the dashboard AZM card (`azm-trend-card.tsx`) at the new Google-AZM table. `activeZoneMinutes` goes from `unavailable / not_supported` to `measured` (today flagged `partial_day`), so update the schema doc, the contract fixture and the smoke test (they currently assert the withheld state) in the same commit. Show the AZM card before and after for 2026-10-17. `heartZoneMinutes` is unchanged.
+
+Rules for Tasks 13–18: AGENTS.md conventions, local-timezone date helpers only, no `any`, one commit per task, done only when `npm run check` passes and `code-reviewer` has reviewed it. Do not begin Task 13 until Task 12 is approved and committed.
+
+## Task 13 — Exercise probe (read-only, STOP after)
+Status: not started
+A one-off script, in the style of the AZM probe, that calls Google for the last 30 days and saves the raw responses to `docs/exercise-probe/`, with no tokens in output. Fetch: exercise data points; the total-calories daily rollup; active-energy-burned for one workout's window; heart-rate for one workout's window.
+Report: which fields the Charge 6 actually fills in (calories, distance, steps, avg HR, AZM, activeDuration, splits, exerciseEvents); the recording method, and whether auto-detected walks show up separately from workouts started by hand; whether the current OAuth scopes are enough without re-consent; how many workouts exist in the DB-covered history range; whether the existing heart-rate samples table can hold workout samples without altering any table or column; how a session's per-workout AZM compares with the active-zone-minutes data the Task 12 fix uses. STOP for approval.
+
+## Task 14 — Schema (new tables only)
+Status: not started
+Two tables. `exercise_sessions`: unique on user_id + Google data point ID, with local `exercise_date` from start time + startUtcOffset, type, display name, start/end, active duration in seconds, calories, distance in meters, steps, avg HR, AZM, recording method; nullable wherever the probe showed the field can be missing. `daily_energy`: user_id + date, total calories, active calories. Workout HR goes into a new table unless Task 13 showed the existing one fits unchanged. Report the push diff and STOP; the user runs `drizzle-kit push`.
+
+## Task 15 — Sync
+Status: not started
+Inside the existing sync window, fetch exercise sessions and daily energy. Delete-and-replace sessions within the fetched window so deletions and edits in Google carry over. Fetch HR samples for each workout window at sync time. Keep it inside the 3-day sync and the existing `?days=N` recovery path; no Google calls on any read path. Report how many extra Google calls a normal sync now makes.
+
+## Task 16 — Engine
+Status: not started
+Pure `src/lib/analytics/exercise.ts`, primitives in and out. Per-workout derived stats: pace and speed from activeDuration (never end minus start), HR min/avg/max from samples, time in each Google zone using the same Karvonen zones and naming caveat as `heartZoneMinutes`. Daily rollup: workout count, active minutes, workout calories vs total calories. Discriminated union for a workout with and without HR samples. Fixtures: a paused workout (active duration less than elapsed); a workout crossing local midnight; a workout with no HR; a day with zero workouts; Google returning distance as 0 for a non-distance activity.
+
+## Task 17 — API
+Status: not started
+Add exercises and daily energy to `/api/v1/day` and `/days` with honest absence. A day with no workouts is measured zero only if that day has been synced, otherwise `not_synced`. Update the schema doc and the drift guard, and extend the smoke test.
+
+## Task 18 — UI
+Status: not started
+An exercise page with a day view: workout list, per-workout HR curve with zone shading, calorie summary. Date navigation uses the calendar date, not the wake-up date. STOP before building and propose the layout first, following `claude_ui-design-direction.md`.
