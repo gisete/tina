@@ -58,7 +58,7 @@ const base: DayInput = {
   cardiacStrain: assembled.hasData ? assembled.cardiacStrain : null,
   hasNightSamples: false,
   restingHeartRate: 60, hrv: 40,
-  activity: { steps: 0, light: 900, moderate: 10, vigorous: 2, peak: 0 },
+  activity: { steps: 0, light: 900, moderate: 10, vigorous: 2, peak: 1 },
 };
 const day = buildDayData(base);
 
@@ -75,9 +75,9 @@ assert(main.cardiacStrain.strainRecoveryScore.status === "unavailable" && main.c
 assert(main.nightHeart.restingHr.status === "measured" && main.nightHeart.restingHr.value === 60, "night RHR");
 // Zeros are measurements.
 assert(day.steps.status === "measured" && day.steps.value === 0, "0 steps stays measured");
-// AZM = the dashboard card's math over stored zone minutes (10*1 + 2*2 = 14), derived, not measured.
+// AZM = the dashboard card's math over stored zone minutes (10*1 + 2*2 + 1*2 = 16; light is not counted), derived, not measured.
 assert(day.activeZoneMinutes.status === "derived", "AZM is derived (computed from zone minutes)");
-assert("value" in day.activeZoneMinutes && day.activeZoneMinutes.value === 14 && day.activeZoneMinutes.unit === "min", "AZM value from calculateActiveZoneMinutes");
+assert("value" in day.activeZoneMinutes && day.activeZoneMinutes.value === 16 && day.activeZoneMinutes.unit === "min", "AZM value from calculateActiveZoneMinutes");
 assert(!("flags" in day.activeZoneMinutes) || day.activeZoneMinutes.flags === undefined, "AZM on a past day has no partial_day flag");
 assert(day.heartZoneMinutes.moderate.status === "measured", "heart zones stay measured");
 const todayAzm = buildDayData({ ...base, date: base.today });
@@ -90,7 +90,10 @@ assert(empty.restingHeartRate.status === "unavailable" && empty.steps.status ===
 const future = buildDayData({ ...base, syncedThrough: "2026-10-20", nightSessions: [], lastNight: null, nightHeart: null, cardiacStrain: null, restingHeartRate: null, hrv: null, activity: null });
 assert(future.sleep.main.status === "unavailable" && future.sleep.main.reason === "not_synced", "after cursor → not_synced");
 const nullAzm = buildDayData({ ...base, activity: { steps: 500, light: null, moderate: null, vigorous: null, peak: null } });
-assert(nullAzm.activeZoneMinutes.status === "unavailable" && nullAzm.steps.status === "measured", "NULL zone columns are unavailable, steps still measured");
+assert(nullAzm.activeZoneMinutes.status === "unavailable" && nullAzm.activeZoneMinutes.reason === "not_worn" && !("value" in nullAzm.activeZoneMinutes) && nullAzm.steps.status === "measured", "NULL zone columns are unavailable (not_worn), no value, steps still measured");
+// Partially NULL zones: AZM is unavailable (never computed from a subset) while the non-null heart zones stay measured.
+const partialAzm = buildDayData({ ...base, activity: { steps: 500, light: 900, moderate: 10, vigorous: 2, peak: null } });
+assert(partialAzm.activeZoneMinutes.status === "unavailable" && partialAzm.heartZoneMinutes.moderate.status === "measured" && partialAzm.heartZoneMinutes.peak.status === "unavailable", "partial NULL zones: AZM unavailable, other zones measured");
 // A main session whose night could not be scored says insufficient_data (not "not_supported").
 const unscored = buildDayData({ ...base, lastNight: null, nightHeart: null, cardiacStrain: null });
 if (unscored.sleep.main.status !== "recorded") throw new Error("recorded expected");

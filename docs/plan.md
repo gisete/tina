@@ -68,7 +68,7 @@ Status: closed: not a bug — the derived AZM matches Google's active-zone-minut
 Status: done
 `activeZoneMinutes` is `status: "derived"` again, with its value from `calculateActiveZoneMinutes` (same as the dashboard card). The schema doc says it is computed from Google's per-day Karvonen zone minutes (moderate x1, vigorous/peak x2) and matches Google's own AZM within about 2 minutes, not exactly. Fixtures and smoke test updated. The Task 11 `heartZoneMinutes` descriptions stay.
 
-Rules for Tasks 13–18: AGENTS.md conventions, local-timezone date helpers only, no `any`, one commit per task, done only when `npm run check` passes and `code-reviewer` has reviewed it. Do not begin Task 13 until Task 12 is approved and committed.
+Rules for Tasks 13–18: AGENTS.md conventions, local-timezone date helpers only, no `any`, one commit per task, done only when `npm run check` passes and `code-reviewer` has reviewed it. Task 12 is closed (not a bug); Task 13 may start.
 
 ## Task 13 — Exercise probe (read-only, STOP after)
 Status: not started

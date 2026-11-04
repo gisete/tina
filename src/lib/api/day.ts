@@ -3,9 +3,9 @@
 // is a MetricValue (src/lib/api/metric.ts). Derived values come from the
 // existing sleep/activity engines via the inputs: nothing here re-does their math.
 
+import { calculateActiveZoneMinutes } from "@/lib/analytics/activity";
 import { selectMainSessions, type CardiacStrain, type LastNightDetail, type NightHeartSummary, type SleepStageType } from "@/lib/analytics/sleep";
 import { dayMetric, classifyAbsence, type AbsenceContext } from "./absence";
-import { calculateActiveZoneMinutes } from "@/lib/analytics/activity";
 import { derived, estimated, measured, unavailable, type MetricValue } from "./metric";
 import { formatInstantWithOffset } from "./time";
 

@@ -63,9 +63,11 @@ function dayChecks(name: string, day: Json | null): void {
   for (const e of validateMetricShapes(day)) failures.push(`${name}: ${e}`);
   for (const e of validateAgainstDoc(name, SCHEMA_DOC.responses.day, [day], { requireAll: false })) failures.push(e);
   checks += 2;
-  const azm = (day as { activeZoneMinutes?: { status?: string; reason?: string; unit?: string; value?: unknown } }).activeZoneMinutes;
+  const azm = (day as { activeZoneMinutes?: { status?: string; reason?: string; unit?: string; value?: unknown; flags?: string[] } }).activeZoneMinutes;
   const azmOk = azm?.status === "derived" ? azm.unit === "min" && typeof azm.value === "number" && Number.isFinite(azm.value) && azm.value >= 0
     : azm?.status === "unavailable" && typeof azm.reason === "string" && azm.reason !== "not_supported" && !("value" in azm);
+  const isToday = (day as { date?: string }).date === localToday();
+  if (isToday && azm?.status === "derived" && !azm.flags?.includes("partial_day")) failures.push(`${name}: today's activeZoneMinutes must carry the partial_day flag`);
   if (!azmOk) failures.push(`${name}: activeZoneMinutes must be derived (non-negative number, unit min) or unavailable with a reason other than not_supported`);
   checks += 1;
 }
