@@ -1,0 +1,117 @@
+{
+  "request": {
+    "range": {
+      "start": {
+        "date": {
+          "year": 2026,
+          "month": 10,
+          "day": 19
+        }
+      },
+      "end": {
+        "date": {
+          "year": 2026,
+          "month": 10,
+          "day": 27
+        }
+      }
+    }
+  },
+  "httpStatus": 200,
+  "response": {
+    "rollupDataPoints": [
+      {
+        "civilStartTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 24
+          },
+          "time": {}
+        },
+        "civilEndTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 25
+          },
+          "time": {}
+        },
+        "activeZoneMinutes": {
+          "sumInCardioHeartZone": "0",
+          "sumInPeakHeartZone": "0",
+          "sumInFatBurnHeartZone": "1"
+        }
+      },
+      {
+        "civilStartTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 23
+          },
+          "time": {}
+        },
+        "civilEndTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 24
+          },
+          "time": {}
+        },
+        "activeZoneMinutes": {
+          "sumInCardioHeartZone": "0",
+          "sumInPeakHeartZone": "0",
+          "sumInFatBurnHeartZone": "13"
+        }
+      },
+      {
+        "civilStartTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 22
+          },
+          "time": {}
+        },
+        "civilEndTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 23
+          },
+          "time": {}
+        },
+        "activeZoneMinutes": {
+          "sumInCardioHeartZone": "0",
+          "sumInPeakHeartZone": "0",
+          "sumInFatBurnHeartZone": "1"
+        }
+      },
+      {
+        "civilStartTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 21
+          },
+          "time": {}
+        },
+        "civilEndTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 22
+          },
+          "time": {}
+        },
+        "activeZoneMinutes": {
+          "sumInCardioHeartZone": "0",
+          "sumInPeakHeartZone": "0",
+          "sumInFatBurnHeartZone": "1"
+        }
+      }
+    ]
+  }
+}
