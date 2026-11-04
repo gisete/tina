@@ -60,3 +60,10 @@ Added to `npm run check`, skipped with a clear message if `TINA_API_TOKEN` is ab
 ## Task 11 — Honest zone data in the API (withhold AZM, label heart zones)
 Status: done
 `heartZoneMinutes` stays `measured`, but its schema description says these are Google's per-day Karvonen heart-rate zones, not Fitbit's fat-burn/cardio/peak zones, and that `light` covers most worn time by design. `activeZoneMinutes` is withheld: `/api/v1/day` and `/api/v1/days` return `status: "unavailable", reason: "not_supported"` with no value, and the schema doc says the same. Stored AZM data and the metric math (`calculateActiveZoneMinutes`, the dashboard's AZM card) are untouched.
+
+## Task 12 — Real active zone minutes from Google (PLAN ONLY)
+Status: plan approved (raw sample: yes; new table + push: yes once the sample confirms the shape, the user runs the push; backfill: 90-day windows, fall back to 14-day without asking, using the same fetch and parse functions as the sync, report row count and empty days). Step 0 (raw sample into docs/azm-probe/) comes first, then STOP and report.
+
+## Task 12b — Switch the dashboard AZM card and the API to the new table
+Status: pending — starts only after the Task 12 backfill is verified.
+Point `activeZoneMinutes` in `/api/v1/day` and `/days` and the dashboard AZM card (`azm-trend-card.tsx`) at the new Google-AZM table. `activeZoneMinutes` goes from `unavailable / not_supported` to `measured` (today flagged `partial_day`), so update the schema doc, the contract fixture and the smoke test (they currently assert the withheld state) in the same commit. Show the AZM card before and after for 2026-10-17. `heartZoneMinutes` is unchanged.
