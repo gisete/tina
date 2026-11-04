@@ -1,0 +1,22 @@
+{
+  "request": {
+    "range": {
+      "start": {
+        "date": {
+          "year": 2026,
+          "month": 10,
+          "day": 27
+        }
+      },
+      "end": {
+        "date": {
+          "year": 2026,
+          "month": 10,
+          "day": 28
+        }
+      }
+    }
+  },
+  "httpStatus": 200,
+  "response": {}
+}

@@ -1,0 +1,48 @@
+{
+  "request": {
+    "range": {
+      "start": {
+        "date": {
+          "year": 2026,
+          "month": 10,
+          "day": 17
+        }
+      },
+      "end": {
+        "date": {
+          "year": 2026,
+          "month": 10,
+          "day": 18
+        }
+      }
+    }
+  },
+  "httpStatus": 200,
+  "response": {
+    "rollupDataPoints": [
+      {
+        "civilStartTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 17
+          },
+          "time": {}
+        },
+        "civilEndTime": {
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 18
+          },
+          "time": {}
+        },
+        "activeZoneMinutes": {
+          "sumInCardioHeartZone": "0",
+          "sumInPeakHeartZone": "0",
+          "sumInFatBurnHeartZone": "37"
+        }
+      }
+    ]
+  }
+}
