@@ -108,6 +108,68 @@ export const dailyActivitySummaries = pgTable(
   ]
 );
 
+/**
+ * One row per Google exercise data point (every recording method: active,
+ * passive, manual — filtering is a UI concern). Null = Google omitted the field
+ * (e.g. strength training has no distance/steps), not a measured zero.
+ */
+export const exerciseSessions = pgTable(
+  "exercise_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    /** Google's data point ID; the idempotency key for sync. */
+    googleDataPointId: text("google_data_point_id").notNull(),
+    /** Local calendar date of the start (startTime + startUtcOffset); Google gives no civil start on the point. */
+    exerciseDate: date("exercise_date").notNull(),
+    exerciseType: text("exercise_type").notNull(),
+    displayName: text("display_name"),
+    startTime: timestamp("start_time").notNull(),
+    endTime: timestamp("end_time").notNull(),
+    startUtcOffsetSeconds: integer("start_utc_offset_seconds").notNull(),
+    endUtcOffsetSeconds: integer("end_utc_offset_seconds"),
+    /** Time actually exercising; shorter than end - start when paused. */
+    activeDurationSeconds: integer("active_duration_seconds").notNull(),
+    /** Google's own session calories. Never summed from active-energy points. */
+    caloriesKcal: real("calories_kcal"),
+    distanceMeters: real("distance_meters"),
+    steps: integer("steps"),
+    avgHeartRateBpm: real("avg_heart_rate_bpm"),
+    avgPaceSecondsPerMeter: real("avg_pace_seconds_per_meter"),
+    activeZoneMinutes: integer("active_zone_minutes"),
+    /** Google's four per-session zone durations, in seconds. */
+    lightZoneSeconds: integer("light_zone_seconds"),
+    moderateZoneSeconds: integer("moderate_zone_seconds"),
+    vigorousZoneSeconds: integer("vigorous_zone_seconds"),
+    peakZoneSeconds: integer("peak_zone_seconds"),
+    /** ACTIVELY_MEASURED | PASSIVELY_MEASURED | MANUAL (as returned by Google). */
+    recordingMethod: text("recording_method").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("exercise_sessions_user_id_google_data_point_id_idx").on(t.userId, t.googleDataPointId),
+    index("exercise_sessions_user_id_exercise_date_idx").on(t.userId, t.exerciseDate),
+  ]
+);
+
+/** Daily energy totals. Null = never fetched for the day (not a measured zero). */
+export const dailyEnergy = pgTable(
+  "daily_energy",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    energyDate: date("energy_date").notNull(),
+    totalCaloriesKcal: real("total_calories_kcal"),
+    activeCaloriesKcal: real("active_calories_kcal"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("daily_energy_user_id_date_idx").on(t.userId, t.energyDate),
+  ]
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sleepSessions: many(sleepSessions),
   heartRateSummaries: many(heartRateSummaries),

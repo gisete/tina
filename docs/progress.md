@@ -122,3 +122,14 @@ Secondary finding: 2026-10-16 has light 0 with 9,421 steps — zone data was mis
 - `buildDayData` (`src/lib/api/day.ts`) returns `activeZoneMinutes` as `derived` again: `calculateActiveZoneMinutes` over the stored zone minutes, the same call as the dashboard card; today carries `partial_day`; a day with no stored zone minutes is `unavailable` with the usual absence reason.
 - Schema doc: computed from Google's per-day Karvonen zone minutes (moderate x1, vigorous/peak x2); matches Google's own AZM within about 2 minutes, not exactly. The two endpoint summaries mention active zone minutes again. The Task 11 `heartZoneMinutes` descriptions are unchanged.
 - Fixtures and smoke test now assert derived (non-negative number, unit min) instead of withheld.
+
+## Task 13 — Exercise probe (done; evidence in docs/exercise-probe/, commit 0e07c29)
+- Read-only Google calls; raw responses saved, no tokens. Findings and decisions are recorded in Tasks 14-16 of docs/plan.md.
+- Night-sample cache (`ensureNightSamples`) counts samples inside the night window (>= 10). Agreed: leave it unchanged; Task 15 instead skips workout HR samples that fall inside any stored sleep window. Of the 28 workouts in the 30-day list, 1 overlaps a stored sleep session (2026-10-15 walk, 29.4 min). Only those 28 are saved raw; the 113-workout figure is a count from the history summary.
+
+## Task 14 — Schema (new tables only; awaiting `drizzle-kit push` by the user)
+- Two brand-new tables in `src/db/schema.ts`: `exercise_sessions` and `daily_energy`. No existing table or column changed. Workout HR reuses `heart_rate_samples` (no new table).
+- `exercise_sessions` also stores `start_utc_offset_seconds` (NOT NULL) and `end_utc_offset_seconds`, so the local `exercise_date` and midnight-crossing can be re-derived. Zone durations are four nullable columns: Task 15 must write null (not 0) when Google omits `heartRateZoneDurations`; distance is converted from millimeters to meters.
+- Unique: (user_id, google_data_point_id) and (user_id, energy_date). Index: (user_id, exercise_date).
+- Also removed an unused `civilStr` from `docs/exercise-probe/probe-exercise.ts` (lint warning that failed `npm run check`).
+- Verified: `npm run check` exit 0 (smoke 436 checks); code-reviewer: no blocking findings. SQL previewed offline with `drizzle-kit generate` into a scratch dir (no DB connection).

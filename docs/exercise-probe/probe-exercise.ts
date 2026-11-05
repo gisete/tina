@@ -63,10 +63,6 @@ const localDay = (p: Json): string | null => {
   const d = new Date(Date.parse(st) + sec * 1000);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 };
-const civilStr = (d: Json | undefined): string | null => {
-  const o = d as { date?: { year?: number; month?: number; day?: number } } | undefined;
-  const x = o?.date; return x?.year ? `${x.year}-${String(x.month).padStart(2, "0")}-${String(x.day).padStart(2, "0")}` : null;
-};
 
 async function main(): Promise<void> {
   const user = await db.query.users.findFirst({ where: eq(users.email, "gisete@gmail.com") });

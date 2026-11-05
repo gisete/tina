@@ -71,12 +71,12 @@ Status: done
 Rules for Tasks 13–18: AGENTS.md conventions, local-timezone date helpers only, no `any`, one commit per task, done only when `npm run check` passes and `code-reviewer` has reviewed it. Task 12 is closed (not a bug); Task 13 may start.
 
 ## Task 13 — Exercise probe (read-only, STOP after)
-Status: not started
+Status: done (evidence commit 0e07c29)
 A one-off script, in the style of the AZM probe, that calls Google for the last 30 days and saves the raw responses to `docs/exercise-probe/`, with no tokens in output. Fetch: exercise data points; the total-calories daily rollup; active-energy-burned for one workout's window; heart-rate for one workout's window.
 Report: which fields the Charge 6 actually fills in (calories, distance, steps, avg HR, AZM, activeDuration, splits, exerciseEvents); the recording method, and whether auto-detected walks show up separately from workouts started by hand; whether the current OAuth scopes are enough without re-consent; how many workouts exist in the DB-covered history range; whether the existing heart-rate samples table can hold workout samples without altering any table or column; how a session's per-workout AZM compares with the active-zone-minutes data the Task 12 fix uses. STOP for approval.
 
 ## Task 14 — Schema (new tables only)
-Status: not started — gated on the night-sample cache check (see Task 15 prerequisite)
+Status: schema written, awaiting `drizzle-kit push` by the user
 Decisions (from the Task 13 probe, evidence in `docs/exercise-probe/`, commit `0e07c29`): workout HR goes in the **existing `heart_rate_samples` table, no new table**; workouts join to samples by time range.
 Two new tables, no change to any existing table or column:
 - `exercise_sessions`: unique on user_id + Google data point ID. Columns: Google data point ID; local `exercise_date` (from the session's start time + startUtcOffset; Google gives no civil start time on the point); type; display name; start/end; active duration in seconds; session calories (Google's own figure, never summed from active-energy points); distance in meters; steps; avg HR; avg pace; AZM; Google's four zone durations (light/moderate/vigorous/peak); recording method. Nullable wherever the probe showed a field can be missing (distance, steps, pace, zone durations, AZM, display name, events-derived values). Every recording method is stored, including passive and manual; filtering is a UI concern.
@@ -85,7 +85,6 @@ Report the push diff and STOP; the user runs `drizzle-kit push`.
 
 ## Task 15 — Sync
 Status: not started
-Prerequisite (checked before Task 14): the lazy night-sample cache check must not be foolable by workout samples. See progress.md for the finding and the agreed fix.
 Inside the existing sync window, fetch exercise sessions and daily energy. Exercise queries filter on `exercise.interval.civil_start_time` (the probe showed `start_time` is rejected with a 400; page size max 25). Delete-and-replace sessions within the fetched window so deletions and edits in Google carry over. Fetch HR samples for each workout window at sync time into `heart_rate_samples`. Keep it inside the 3-day sync and the existing `?days=N` recovery path; no Google calls on any read path. Overlap rule: when storing workout HR samples, skip any sample whose timestamp falls inside a stored `sleep_sessions` window (`start_time` to `end_time`, any session type). A night's samples come only from the night fetch (`ensureNightSamples` stays unchanged). The filter is a pure function in `src/lib/`, with a fixture: a workout overlapping a night's end by 10 minutes stores only the non-overlapping samples. (Task 13 data: 1 of the 28 workouts in the 30-day list overlaps a stored sleep window, 2026-10-15 walk, 29.4 min.) The historical HR backfill runs sequentially through the recovery path, with a short pause between calls. Report how many extra Google calls a normal sync now makes.
 
 ## Task 16 — Engine
