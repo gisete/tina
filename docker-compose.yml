@@ -8,12 +8,10 @@ name: tina
 
 services:
   db:
-    # Same MAJOR version as the database the data comes from. Set POSTGRES_MAJOR
-    # (shell or a project-level .env) before starting db; the default is an
-    # invalid tag on purpose, so a forgotten value fails loudly instead of guessing.
+    # Same MAJOR version (16) as the database the data comes from.
     # NOTE: Postgres 18+ images keep data under /var/lib/postgresql (not .../data);
-    # if the major is 18 or newer, change the volume mount below accordingly.
-    image: postgres:${POSTGRES_MAJOR:-SET_POSTGRES_MAJOR}
+    # if this is ever bumped to 18 or newer, change the volume mount below.
+    image: postgres:16-alpine
     env_file: .env.production
     volumes:
       - pgdata:/var/lib/postgresql/data
