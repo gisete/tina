@@ -84,12 +84,16 @@ Two new tables, no change to any existing table or column:
 Report the push diff and STOP; the user runs `drizzle-kit push`.
 
 ## Task 15 — Sync
-Status: built and verified on a live 3-day sync; exercise-only backfill mode added (`/api/sync?days=240&only=exercise`); the backfill has NOT been run (user triggers it), then verify read-only and mark done
+Status: done (commits bc8535f, 0ba51ff; historical backfill run and verified read-only: 123 sessions 2026-03-12..2026-11-05, 241 daily_energy rows, baselines unchanged)
 Inside the existing sync window, fetch exercise sessions and daily energy. Exercise queries filter on `exercise.interval.civil_start_time` (the probe showed `start_time` is rejected with a 400; page size max 25). Delete-and-replace sessions within the fetched window so deletions and edits in Google carry over. Fetch HR samples for each workout window at sync time into `heart_rate_samples`. Keep it inside the 3-day sync and the existing `?days=N` recovery path; no Google calls on any read path. Overlap rule: when storing workout HR samples, skip any sample whose timestamp falls inside a stored `sleep_sessions` window (`start_time` to `end_time`, any session type). A night's samples come only from the night fetch (`ensureNightSamples` stays unchanged). The filter is a pure function in `src/lib/`, with a fixture: a workout overlapping a night's end by 10 minutes stores only the non-overlapping samples. (Task 13 data: 1 of the 28 workouts in the 30-day list overlaps a stored sleep window, 2026-10-15 walk, 29.4 min.) The historical HR backfill runs sequentially through the recovery path, with a short pause between calls. Report how many extra Google calls a normal sync now makes.
 
 ## Task 16 — Engine
 Status: not started
 Pure `src/lib/analytics/exercise.ts`, primitives in and out. Per-workout derived stats: pace and speed from activeDuration (never end minus start), HR min/avg/max from samples, time in each Google zone using the same Karvonen zones and naming caveat as `heartZoneMinutes`. Session calories are Google's own figure; never sum active-energy points into them. Daily rollup: workout count, active minutes, workout calories vs total calories. Discriminated union for a workout with and without HR samples. Fixtures: a paused workout (active duration less than elapsed; real example 2026-10-23 14:04, 942 s active vs 1389 s elapsed); a workout crossing local midnight; a workout with no HR; a day with zero workouts; Google returning distance as 0 for a non-distance activity.
+Additional fixtures and rules (decided after the Task 15 backfill):
+- Overlapping sessions are both kept and both shown, no dedupe rule: the 2026-11-03 pair (MANUAL walk 18:00:00-18:20:00 and an ACTIVELY_MEASURED walk 18:17:43-18:37:56, two real Google data points) is a fixture asserting both survive the engine and both appear in the day's list. Manual sessions display as-is with a "Manual" label.
+- Resting-only total-calories fill: where `active_calories_kcal` is null AND there is no wear evidence that day (no `heart_rate_summaries` row and no `heart_rate_samples` that day, e.g. 2026-10-10..13, all 1488.3264), Google's total is a resting-only fill. Treat total calories on those days as `unavailable` / `not_worn` under the honest-absence model, not as measured. Active calories null before 2026-05-08 (Google returns none) with no wear evidence follows the same rule. Today (partial) stays `partial_day`. A day with null active calories but wear evidence is not treated as not_worn.
+
 
 ## Task 17 — API
 Status: not started
