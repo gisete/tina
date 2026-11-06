@@ -102,3 +102,13 @@ Add exercises and daily energy to `/api/v1/day` and `/days` with honest absence.
 ## Task 18 — UI
 Status: not started
 An exercise page with a day view: workout list, per-workout HR curve with zone shading, calorie summary. Date navigation uses the calendar date, not the wake-up date. STOP before building and propose the layout first, following `claude_ui-design-direction.md`.
+
+## Task 19 — Server deploy prep (k-play-server)
+Status: done (repo changes only; no DB writes, no Google calls, no schema changes, drizzle-kit not run)
+Context: Tina moves to a home server (Ubuntu 24.04, host TZ = UTC): one always-on Docker container bound to 127.0.0.1:3101, fronted by a separate Caddy stack (not in this repo) at https://tina.kindahl.org, plus occasional ad-hoc `npm run dev` via VS Code port forwarding at localhost:3100.
+1. Timezone enforced, not assumed: `TZ=Europe/Lisbon` prefix on every package.json script that runs app or fixture code; `dev` on 127.0.0.1:3100; startup guard in `src/instrumentation.ts` (pure decision in `src/lib/timezone-guard.ts` + fixture): throw in production, warn in development.
+2. `output: "standalone"`, multi-stage Dockerfile (deps -> build -> runtime, node 22 LTS slim, non-root user, `ENV TZ=Europe/Lisbon` + tzdata), `.dockerignore`. The build needs no DATABASE_URL or secret.
+3. `docker-compose.yml`: `db` (postgres, MAJOR set by the user, named volume, 127.0.0.1:5432 only, pg_isready healthcheck) and `app` (env_file `.env.production`, 127.0.0.1:3101:3000, restart unless-stopped, depends_on db healthy, TZ).
+4. `drizzle.config.ts` loads `.env.local` explicitly (already did; left unchanged).
+5. `scripts/deploy.sh`: main + clean tree only; `docker compose build app`, `up -d --no-deps app`, poll 127.0.0.1:3101 for 90 s. Never runs drizzle-kit or touches db.
+6. `.env.production` / `.env.production.*` git-ignored; `.env.production.example` lists names only.

@@ -1,16 +1,44 @@
-version: '3.8'
+# Tina on the home server. Nothing here is published beyond 127.0.0.1:
+# the reverse proxy (a separate Caddy stack, not part of this repo) fronts the app.
+#
+# Both services read .env.production (git-ignored; create it on the server from
+# .env.production.example). It must define POSTGRES_USER / POSTGRES_PASSWORD /
+# POSTGRES_DB for the db service and a DATABASE_URL whose host is "db:5432".
+name: tina
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: health_dash_db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    ports:
-      - "54322:5432"
+  db:
+    # Same MAJOR version as the database the data comes from. Set POSTGRES_MAJOR
+    # (shell or a project-level .env) before starting db; the default is an
+    # invalid tag on purpose, so a forgotten value fails loudly instead of guessing.
+    # NOTE: Postgres 18+ images keep data under /var/lib/postgresql (not .../data);
+    # if the major is 18 or newer, change the volume mount below accordingly.
+    image: postgres:${POSTGRES_MAJOR:-SET_POSTGRES_MAJOR}
+    env_file: .env.production
     volumes:
       - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env.production
+    environment:
+      TZ: Europe/Lisbon
+    ports:
+      - "127.0.0.1:3101:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:

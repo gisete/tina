@@ -1,6 +1,6 @@
 // Contract smoke test for /api/v1 — part of `npm run check`.
 //   - Skipped (exit 0, loud message) when TINA_API_TOKEN is absent.
-//   - Starts nothing: expects `npm run dev` to be running (TINA_API_URL, default http://localhost:3000).
+//   - Starts nothing: expects `npm run dev` to be running (TINA_API_URL, default http://127.0.0.1:3100).
 //     With a token set, an unreachable server is a FAILURE (only a missing token skips);
 //     set TINA_SMOKE_SKIP_UNREACHABLE=1 to opt out.
 //   - READ-ONLY. It never calls POST /api/v1/sync and never writes to the database; the
@@ -22,7 +22,7 @@ import {
 import { addDays, localToday } from "@/lib/dates";
 
 const TOKEN = process.env.TINA_API_TOKEN;
-const BASE = (process.env.TINA_API_URL ?? "http://localhost:3000").replace(/\/$/, "");
+const BASE = (process.env.TINA_API_URL ?? "http://127.0.0.1:3100").replace(/\/$/, "");
 const SKIP_UNREACHABLE = process.env.TINA_SMOKE_SKIP_UNREACHABLE === "1";
 
 const failures: string[] = [];

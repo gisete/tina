@@ -1,0 +1,12 @@
+.env*
+.next
+node_modules
+.git
+docs/
+*.tsbuildinfo
+.claude
+.vercel
+npm-debug.log*
+Dockerfile
+docker-compose.yml
+.dockerignore

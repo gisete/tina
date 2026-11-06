@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "TZ=Europe/Lisbon next dev -p 3100 -H 127.0.0.1",
+    "build": "TZ=Europe/Lisbon next build",
+    "start": "TZ=Europe/Lisbon next start",
     "lint": "eslint",
-    "check": "tsc --noEmit && npm run lint -- --max-warnings 0 && npm run build && bash scripts/run-fixtures.sh && npx tsx scripts/contract-smoke.ts"
+    "fixtures": "TZ=Europe/Lisbon bash scripts/run-fixtures.sh",
+    "smoke": "TZ=Europe/Lisbon npx tsx scripts/contract-smoke.ts",
+    "check": "tsc --noEmit && npm run lint -- --max-warnings 0 && npm run build && npm run fixtures && npm run smoke"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",
