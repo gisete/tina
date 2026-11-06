@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { syncFromGoogle, readDashboardData } from "@/app/actions/sync";
-import { MAX_RECOVERY_DAYS, parseRecoveryDays } from "@/lib/sync/catch-up";
+import { maxRecoveryDays, parseRecoveryDays, parseRecoveryMode } from "@/lib/sync/catch-up";
 import { runRangeSync, type RangeSyncResult } from "@/lib/sync/range-sync";
 import { auth } from "@/auth";
 
@@ -21,17 +21,28 @@ export async function GET(request: Request) {
     // Without it, one forced recent-window step (what the Sync button does).
     const { searchParams } = new URL(request.url);
     const rawDays = searchParams.get("days");
+    // ?only is validated up front, so a bad value (or ?only without ?days) is
+    // never silently ignored and turned into a normal sync.
+    const mode = parseRecoveryMode(searchParams.get("only"));
+    if (mode === null) {
+      return NextResponse.json({ error: 'only must be "exercise" (or omitted).' }, { status: 400 });
+    }
+    if (rawDays === null && mode.kind === "exercise-only") {
+      return NextResponse.json({ error: "only=exercise requires days." }, { status: 400 });
+    }
     let rangeSync: RangeSyncResult | undefined;
     if (rawDays !== null) {
-      const days = parseRecoveryDays(rawDays);
+      const days = parseRecoveryDays(rawDays, mode);
       if (days === null) {
-        return NextResponse.json({ error: `days must be an integer from 1 to ${MAX_RECOVERY_DAYS}.` }, { status: 400 });
+        return NextResponse.json({ error: `days must be an integer from 1 to ${maxRecoveryDays(mode)}.` }, { status: 400 });
       }
-      rangeSync = await runRangeSync(session.user.id, days);
-      revalidatePath("/dashboard");
-      revalidatePath("/dashboard/sleep");
-      revalidatePath("/dashboard/heart");
-      revalidatePath("/dashboard/today");
+      rangeSync = await runRangeSync(session.user.id, days, mode);
+      if (mode.kind === "full") {
+        revalidatePath("/dashboard");
+        revalidatePath("/dashboard/sleep");
+        revalidatePath("/dashboard/heart");
+        revalidatePath("/dashboard/today");
+      }
       if (!rangeSync.ok) {
         const busy = rangeSync.chunks.some((c) => c.status === "busy");
         if (rangeSync.authRequired) {

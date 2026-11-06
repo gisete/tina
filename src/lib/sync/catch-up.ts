@@ -57,14 +57,47 @@ export function splitRange(from: string, to: string, chunkDays: number = CHUNK_D
 /** Largest N accepted by the manual recovery range (/api/sync?days=N). */
 export const MAX_RECOVERY_DAYS = 120;
 
+/** Largest N accepted by the exercise-only recovery range (covers the full Google history). */
+export const MAX_EXERCISE_BACKFILL_DAYS = 240;
+
 /**
- * Parses the ?days query value: an integer from 1 to MAX_RECOVERY_DAYS, else
- * null (the route answers 400). No clamping: a request over the cap is refused.
+ * What a recovery run syncs. "full" is every data type (sleep, heart, zones,
+ * steps and the exercise slice); "exercise-only" is just exercise sessions,
+ * the two calorie rollups and per-workout HR.
  */
-export function parseRecoveryDays(raw: string): number | null {
+export type RecoveryMode = { kind: "full" } | { kind: "exercise-only" };
+
+export const FULL_RECOVERY: RecoveryMode = { kind: "full" };
+export const EXERCISE_ONLY_RECOVERY: RecoveryMode = { kind: "exercise-only" };
+
+/** The ?days cap for a mode. */
+export function maxRecoveryDays(mode: RecoveryMode): number {
+  switch (mode.kind) {
+    case "full":
+      return MAX_RECOVERY_DAYS;
+    case "exercise-only":
+      return MAX_EXERCISE_BACKFILL_DAYS;
+  }
+}
+
+/**
+ * Parses the ?only query value. Absent -> full; "exercise" -> exercise-only;
+ * anything else (including an empty value) is invalid -> null (the route answers 400).
+ */
+export function parseRecoveryMode(raw: string | null): RecoveryMode | null {
+  if (raw === null) return FULL_RECOVERY;
+  return raw === "exercise" ? EXERCISE_ONLY_RECOVERY : null;
+}
+
+/**
+ * Parses the ?days query value: an integer from 1 to the mode's cap (the full
+ * path's MAX_RECOVERY_DAYS by default), else null (the route answers 400). No
+ * clamping: a request over the cap is refused.
+ */
+export function parseRecoveryDays(raw: string, mode: RecoveryMode = FULL_RECOVERY): number | null {
   if (!/^\d+$/.test(raw.trim())) return null;
   const days = Number(raw);
-  return days >= 1 && days <= MAX_RECOVERY_DAYS ? days : null;
+  return days >= 1 && days <= maxRecoveryDays(mode) ? days : null;
 }
 
 /**

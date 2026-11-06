@@ -12,7 +12,6 @@ import {
   fetchGoogleDailyEnergy,
 } from "@/lib/google/client";
 import { GoogleAuthError } from "@/lib/google/errors";
-import { normalizeDailyEnergy, normalizeExercisePoints } from "@/lib/google/exercise-normalizers";
 import {
   normalizeGoogleSleepSessions,
   normalizeHeartData,
@@ -23,10 +22,8 @@ import {
   persistHealthRecords,
   persistActivitySummaries,
   persistDailySteps,
-  persistDailyEnergy,
-  replaceExerciseSessions,
 } from "@/lib/sync/persist";
-import { syncWorkoutHeartRate } from "@/lib/sync/workout-hr";
+import { persistExerciseSlice, type ExerciseRowCounts } from "@/lib/sync/exercise-range";
 import { buildActivitySummaries } from "@/lib/sync/activity-summaries";
 import { addDays, parseLocalDate } from "@/lib/dates";
 import { splitRange } from "@/lib/sync/catch-up";
@@ -74,7 +71,7 @@ async function fetchZonesInWindows(userId: string, from: string, to: string): Pr
 }
 
 /** Rows handed to each upsert by one syncDateRange call (inserts and updates alike). */
-export interface RangeRowCounts {
+export interface RangeRowCounts extends ExerciseRowCounts {
   sleepSessions: number;
   sleepStages: number;
   heartSummaries: number;
@@ -82,14 +79,6 @@ export interface RangeRowCounts {
   activityZoneDays: number;
   /** daily_activity_summaries rows written with steps. */
   stepDays: number;
-  /** exercise_sessions stored for the range (after delete-and-replace). */
-  exerciseSessions: number;
-  /** daily_energy rows written. */
-  energyDays: number;
-  /** Google heart-rate calls made for workout windows (one per workout). */
-  workoutHrCalls: number;
-  /** Workout heart-rate samples written, after the sleep-window exclusion. */
-  workoutHrSamples: number;
 }
 
 /**
@@ -134,16 +123,8 @@ export async function syncDateRange(userId: string, from: string, to: string): P
   await persistActivitySummaries(userId, activitySummaries);
   await persistDailySteps(userId, dailySteps);
 
-  const exerciseBatch = normalizeExercisePoints(exercise);
-  if (exerciseBatch.skipped > 0) {
-    console.warn(`[sync] Skipped ${exerciseBatch.skipped} exercise point(s) missing required fields`);
-  }
-  const dailyEnergyRows = normalizeDailyEnergy(energy.total, energy.active);
-  // Unreadable points: upsert only, so their stored rows are not deleted.
-  await replaceExerciseSessions(userId, from, to, exerciseBatch.sessions, exerciseBatch.skipped === 0);
-  await persistDailyEnergy(userId, dailyEnergyRows);
   // After sleep is persisted: workout samples inside a stored sleep window are skipped.
-  const workoutHr = await syncWorkoutHeartRate(userId, exerciseBatch.sessions);
+  const exerciseCounts = await persistExerciseSlice(userId, from, to, { exercise, energy });
 
   return {
     sleepSessions: normalizedSleep.length,
@@ -151,9 +132,6 @@ export async function syncDateRange(userId: string, from: string, to: string): P
     heartSummaries: heartRecords.length,
     activityZoneDays: activitySummaries.length,
     stepDays: dailySteps.length,
-    exerciseSessions: exerciseBatch.sessions.length,
-    energyDays: dailyEnergyRows.length,
-    workoutHrCalls: workoutHr.calls,
-    workoutHrSamples: workoutHr.samplesStored,
+    ...exerciseCounts,
   };
 }
