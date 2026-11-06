@@ -2,13 +2,17 @@
 // callers hand in already-normalized records and never touch the schema.
 
 import { db } from "@/db/client";
-import { sleepSessions, sleepStages, heartRateSummaries, heartRateSamples, dailyActivitySummaries } from "@/db/schema";
+import {
+  sleepSessions, sleepStages, heartRateSummaries, heartRateSamples, dailyActivitySummaries,
+  exerciseSessions, dailyEnergy,
+} from "@/db/schema";
 import type {
   normalizeGoogleSleepSession,
   NormalizedHeartRecord,
   NormalizedHeartRateSample,
 } from "@/lib/google/normalizers";
-import { eq, sql } from "drizzle-orm";
+import type { NormalizedDailyEnergy, NormalizedExerciseSession } from "@/lib/google/exercise-normalizers";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 
 export type NormalizedSleepSession = NonNullable<ReturnType<typeof normalizeGoogleSleepSession>>;
 
@@ -182,4 +186,84 @@ export async function persistHeartRateSamples(samples: NormalizedHeartRateSample
       set: { bpm: sql`EXCLUDED.bpm` },
     });
   console.log(`[sync] Upserted ${samples.length} heart rate samples`);
+}
+
+/**
+ * Delete-and-replace of exercise sessions for the fetched civil-date window
+ * [from, to], in one transaction, so deletions and edits made in Google carry
+ * over. The insert still upserts on (user, Google data point ID): a session
+ * whose local date moved outside the window must not duplicate.
+ * Only call with a fetch that fully succeeded: an empty list means "no workouts".
+ * `deleteMissing: false` upserts only, for a batch where some points were
+ * unreadable (their stored rows must not be deleted).
+ */
+export async function replaceExerciseSessions(
+  userId: string,
+  from: string,
+  to: string,
+  sessions: NormalizedExerciseSession[],
+  deleteMissing: boolean = true,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    if (deleteMissing) {
+      await tx
+        .delete(exerciseSessions)
+        .where(and(
+          eq(exerciseSessions.userId, userId),
+          gte(exerciseSessions.exerciseDate, from),
+          lte(exerciseSessions.exerciseDate, to),
+        ));
+    }
+    if (sessions.length === 0) return;
+    await tx
+      .insert(exerciseSessions)
+      .values(sessions.map((s) => ({ userId, ...s })))
+      .onConflictDoUpdate({
+        target: [exerciseSessions.userId, exerciseSessions.googleDataPointId],
+        set: {
+          exerciseDate: sql`EXCLUDED.exercise_date`,
+          exerciseType: sql`EXCLUDED.exercise_type`,
+          displayName: sql`EXCLUDED.display_name`,
+          startTime: sql`EXCLUDED.start_time`,
+          endTime: sql`EXCLUDED.end_time`,
+          startUtcOffsetSeconds: sql`EXCLUDED.start_utc_offset_seconds`,
+          endUtcOffsetSeconds: sql`EXCLUDED.end_utc_offset_seconds`,
+          activeDurationSeconds: sql`EXCLUDED.active_duration_seconds`,
+          caloriesKcal: sql`EXCLUDED.calories_kcal`,
+          distanceMeters: sql`EXCLUDED.distance_meters`,
+          steps: sql`EXCLUDED.steps`,
+          avgHeartRateBpm: sql`EXCLUDED.avg_heart_rate_bpm`,
+          avgPaceSecondsPerMeter: sql`EXCLUDED.avg_pace_seconds_per_meter`,
+          activeZoneMinutes: sql`EXCLUDED.active_zone_minutes`,
+          lightZoneSeconds: sql`EXCLUDED.light_zone_seconds`,
+          moderateZoneSeconds: sql`EXCLUDED.moderate_zone_seconds`,
+          vigorousZoneSeconds: sql`EXCLUDED.vigorous_zone_seconds`,
+          peakZoneSeconds: sql`EXCLUDED.peak_zone_seconds`,
+          recordingMethod: sql`EXCLUDED.recording_method`,
+          updatedAt: sql`NOW()`,
+        },
+      });
+  });
+  console.log(`[sync] Replaced exercise sessions ${from}..${to}: ${sessions.length} stored`);
+}
+
+/**
+ * Upserts daily total/active calories. Today's totals grow through the day, so
+ * a present incoming value overwrites; a null incoming column keeps the stored
+ * value (COALESCE) so a rollup that omitted a day never erases a good reading.
+ */
+export async function persistDailyEnergy(userId: string, rows: NormalizedDailyEnergy[]): Promise<void> {
+  if (rows.length === 0) return;
+  await db
+    .insert(dailyEnergy)
+    .values(rows.map((r) => ({ userId, ...r })))
+    .onConflictDoUpdate({
+      target: [dailyEnergy.userId, dailyEnergy.energyDate],
+      set: {
+        totalCaloriesKcal: sql`COALESCE(EXCLUDED.total_calories_kcal, ${dailyEnergy.totalCaloriesKcal})`,
+        activeCaloriesKcal: sql`COALESCE(EXCLUDED.active_calories_kcal, ${dailyEnergy.activeCaloriesKcal})`,
+        updatedAt: sql`NOW()`,
+      },
+    });
+  console.log(`[sync] Upserted ${rows.length} daily energy rows`);
 }

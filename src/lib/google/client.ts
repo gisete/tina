@@ -11,6 +11,7 @@ import type {
   GoogleZoneMinutePoint,
   GoogleDailyStepsPoint,
 } from "./normalizers";
+import type { GoogleEnergyRollupPoint, GoogleExercisePoint } from "./exercise-normalizers";
 
 async function refreshGoogleAccessToken(userId: string, refreshToken: string) {
   const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -84,6 +85,12 @@ interface FetchHealthOptions {
   filter?: string;
   /** Sleep/exercise sessions are capped at 25 per page by the API. */
   pageSize?: number;
+  /**
+   * When true, hitting MAX_PAGES with a nextPageToken still set throws instead
+   * of returning a truncated list. For callers that act on the list being
+   * complete (e.g. delete-and-replace).
+   */
+  failOnTruncation?: boolean;
 }
 
 /** Safety valve so a bad filter can never loop forever on nextPageToken. */
@@ -146,6 +153,9 @@ async function fetchHealthDataType(
 
     pageToken = data.nextPageToken;
     if (!pageToken) break;
+    if (options.failOnTruncation && page === MAX_PAGES - 1) {
+      throw new Error(`Google Health API [${dataType}]: more than ${MAX_PAGES} pages; refusing to use a truncated list`);
+    }
   }
 
   console.log(`[google] Fetched ${allPoints.length} ${dataType} data points`);
@@ -243,8 +253,11 @@ export async function fetchGoogleHeartRateSamples(
   return dataPoints as GoogleHealthHeartRateSamplePoint[];
 }
 
-/** Days per dailyRollUp request — keeps each response well inside one page. */
+/** Days per steps dailyRollUp request — keeps each response well inside one page. */
 const STEPS_ROLLUP_CHUNK_DAYS = 30;
+
+/** total-calories and active-energy-burned dailyRollUp accept at most 14 days per request (Task 13 probe). */
+const ENERGY_ROLLUP_CHUNK_DAYS = 14;
 
 const toCivilDate = (s: string) => {
   const [year, month, day] = s.split("-").map(Number);
@@ -252,22 +265,24 @@ const toCivilDate = (s: string) => {
 };
 
 /**
- * Fetches server-side daily step totals via the `steps` data type's
- * `dailyRollUp`, keyed by the user's civil date. `startDate` is inclusive and
- * `endDateExclusive` exclusive ("YYYY-MM-DD", local-tz helpers only), so
- * passing tomorrow includes today's partial total.
+ * Shared `dataPoints:dailyRollUp` caller: one POST per chunk of at most
+ * `chunkDays` civil days, with the 401 refresh-and-retry. `startDate` is
+ * inclusive and `endDateExclusive` exclusive ("YYYY-MM-DD", local-tz helpers
+ * only). Returns the concatenated `rollupDataPoints`.
  */
-export async function fetchGoogleDailySteps(
+async function fetchDailyRollUp(
   userId: string,
+  dataType: string,
   startDate: string,
   endDateExclusive: string,
-): Promise<GoogleDailyStepsPoint[]> {
-  const url = "https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp";
+  chunkDays: number,
+): Promise<unknown[]> {
+  const url = `https://health.googleapis.com/v4/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`;
   let accessToken = await getGoogleValidClientToken(userId);
-  const points: GoogleDailyStepsPoint[] = [];
+  const points: unknown[] = [];
 
-  for (let from = startDate; from < endDateExclusive; from = addDays(from, STEPS_ROLLUP_CHUNK_DAYS)) {
-    const chunkEnd = addDays(from, STEPS_ROLLUP_CHUNK_DAYS);
+  for (let from = startDate; from < endDateExclusive; from = addDays(from, chunkDays)) {
+    const chunkEnd = addDays(from, chunkDays);
     const to = chunkEnd < endDateExclusive ? chunkEnd : endDateExclusive;
     const body = JSON.stringify({ range: { start: toCivilDate(from), end: toCivilDate(to) } });
 
@@ -288,15 +303,63 @@ export async function fetchGoogleDailySteps(
       response = await doFetch(accessToken);
     }
     if (!response.ok) {
-      const message = `Google Health API error [steps dailyRollUp]: ${response.status} - ${await response.text()}`;
+      const message = `Google Health API error [${dataType} dailyRollUp]: ${response.status} - ${await response.text()}`;
       if (response.status === 401) throw new GoogleAuthError(message);
       throw new Error(message);
     }
 
     const data = await response.json();
-    points.push(...((data.rollupDataPoints ?? []) as GoogleDailyStepsPoint[]));
+    points.push(...(data.rollupDataPoints ?? []));
   }
 
-  console.log(`[google] Fetched ${points.length} daily steps rollup points`);
+  console.log(`[google] Fetched ${points.length} ${dataType} dailyRollUp points`);
   return points;
+}
+
+/**
+ * Fetches server-side daily step totals via the `steps` data type's
+ * `dailyRollUp`, keyed by the user's civil date. `startDate` is inclusive and
+ * `endDateExclusive` exclusive ("YYYY-MM-DD", local-tz helpers only), so
+ * passing tomorrow includes today's partial total.
+ */
+export async function fetchGoogleDailySteps(
+  userId: string,
+  startDate: string,
+  endDateExclusive: string,
+): Promise<GoogleDailyStepsPoint[]> {
+  const points = await fetchDailyRollUp(userId, "steps", startDate, endDateExclusive, STEPS_ROLLUP_CHUNK_DAYS);
+  return points as GoogleDailyStepsPoint[];
+}
+
+/**
+ * Fetches daily total calories and active calories (two dailyRollUp streams,
+ * run one after the other) for [startDate, endDateExclusive).
+ */
+export async function fetchGoogleDailyEnergy(
+  userId: string,
+  startDate: string,
+  endDateExclusive: string,
+): Promise<{ total: GoogleEnergyRollupPoint[]; active: GoogleEnergyRollupPoint[] }> {
+  const total = await fetchDailyRollUp(userId, "total-calories", startDate, endDateExclusive, ENERGY_ROLLUP_CHUNK_DAYS);
+  const active = await fetchDailyRollUp(userId, "active-energy-burned", startDate, endDateExclusive, ENERGY_ROLLUP_CHUNK_DAYS);
+  return { total: total as GoogleEnergyRollupPoint[], active: active as GoogleEnergyRollupPoint[] };
+}
+
+/**
+ * Fetches exercise sessions whose LOCAL start date is in [startDate,
+ * endDateExclusive). The exercise type only accepts the `civil_start_time`
+ * filter member (physical `start_time` is rejected with a 400) and pages are
+ * capped at 25.
+ */
+export async function fetchGoogleExerciseSessions(
+  userId: string,
+  startDate: string,
+  endDateExclusive: string,
+): Promise<GoogleExercisePoint[]> {
+  const points = await fetchHealthDataType(userId, "exercise", {
+    filter: `exercise.interval.civil_start_time >= "${startDate}" AND exercise.interval.civil_start_time < "${endDateExclusive}"`,
+    pageSize: 25,
+    failOnTruncation: true, // the caller deletes-and-replaces, so a truncated list would delete real sessions
+  });
+  return points as GoogleExercisePoint[];
 }

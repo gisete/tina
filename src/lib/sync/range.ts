@@ -8,8 +8,11 @@ import {
   fetchGoogleHeartData,
   fetchGoogleZoneRecords,
   fetchGoogleDailySteps,
+  fetchGoogleExerciseSessions,
+  fetchGoogleDailyEnergy,
 } from "@/lib/google/client";
 import { GoogleAuthError } from "@/lib/google/errors";
+import { normalizeDailyEnergy, normalizeExercisePoints } from "@/lib/google/exercise-normalizers";
 import {
   normalizeGoogleSleepSessions,
   normalizeHeartData,
@@ -20,7 +23,10 @@ import {
   persistHealthRecords,
   persistActivitySummaries,
   persistDailySteps,
+  persistDailyEnergy,
+  replaceExerciseSessions,
 } from "@/lib/sync/persist";
+import { syncWorkoutHeartRate } from "@/lib/sync/workout-hr";
 import { buildActivitySummaries } from "@/lib/sync/activity-summaries";
 import { addDays, parseLocalDate } from "@/lib/dates";
 import { splitRange } from "@/lib/sync/catch-up";
@@ -76,6 +82,14 @@ export interface RangeRowCounts {
   activityZoneDays: number;
   /** daily_activity_summaries rows written with steps. */
   stepDays: number;
+  /** exercise_sessions stored for the range (after delete-and-replace). */
+  exerciseSessions: number;
+  /** daily_energy rows written. */
+  energyDays: number;
+  /** Google heart-rate calls made for workout windows (one per workout). */
+  workoutHrCalls: number;
+  /** Workout heart-rate samples written, after the sleep-window exclusion. */
+  workoutHrSamples: number;
 }
 
 /**
@@ -93,6 +107,8 @@ export async function syncDateRange(userId: string, from: string, to: string): P
     fetchGoogleHeartData(userId, startISO, endISO),
     fetchZonesInWindows(userId, from, to),
     fetchGoogleDailySteps(userId, from, addDays(to, 1)),
+    fetchGoogleExerciseSessions(userId, from, addDays(to, 1)),
+    fetchGoogleDailyEnergy(userId, from, addDays(to, 1)),
   ]);
 
   const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
@@ -100,11 +116,13 @@ export async function syncDateRange(userId: string, from: string, to: string): P
     const auth = failures.find((f) => f.reason instanceof GoogleAuthError);
     throw (auth ?? failures[0]).reason;
   }
-  const [sleep, heart, zones, steps] = results.map((r) => (r as PromiseFulfilledResult<unknown>).value) as [
+  const [sleep, heart, zones, steps, exercise, energy] = results.map((r) => (r as PromiseFulfilledResult<unknown>).value) as [
     Awaited<ReturnType<typeof fetchGoogleSleepData>>,
     Awaited<ReturnType<typeof fetchGoogleHeartData>>,
     GoogleZoneMinutePoint[],
     Awaited<ReturnType<typeof fetchGoogleDailySteps>>,
+    Awaited<ReturnType<typeof fetchGoogleExerciseSessions>>,
+    Awaited<ReturnType<typeof fetchGoogleDailyEnergy>>,
   ];
 
   const normalizedSleep = normalizeGoogleSleepSessions(userId, sleep);
@@ -116,11 +134,26 @@ export async function syncDateRange(userId: string, from: string, to: string): P
   await persistActivitySummaries(userId, activitySummaries);
   await persistDailySteps(userId, dailySteps);
 
+  const exerciseBatch = normalizeExercisePoints(exercise);
+  if (exerciseBatch.skipped > 0) {
+    console.warn(`[sync] Skipped ${exerciseBatch.skipped} exercise point(s) missing required fields`);
+  }
+  const dailyEnergyRows = normalizeDailyEnergy(energy.total, energy.active);
+  // Unreadable points: upsert only, so their stored rows are not deleted.
+  await replaceExerciseSessions(userId, from, to, exerciseBatch.sessions, exerciseBatch.skipped === 0);
+  await persistDailyEnergy(userId, dailyEnergyRows);
+  // After sleep is persisted: workout samples inside a stored sleep window are skipped.
+  const workoutHr = await syncWorkoutHeartRate(userId, exerciseBatch.sessions);
+
   return {
     sleepSessions: normalizedSleep.length,
     sleepStages: normalizedSleep.reduce((n, s) => n + s.stages.length, 0),
     heartSummaries: heartRecords.length,
     activityZoneDays: activitySummaries.length,
     stepDays: dailySteps.length,
+    exerciseSessions: exerciseBatch.sessions.length,
+    energyDays: dailyEnergyRows.length,
+    workoutHrCalls: workoutHr.calls,
+    workoutHrSamples: workoutHr.samplesStored,
   };
 }
