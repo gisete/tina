@@ -127,7 +127,7 @@ Secondary finding: 2026-10-16 has light 0 with 9,421 steps — zone data was mis
 - Read-only Google calls; raw responses saved, no tokens. Findings and decisions are recorded in Tasks 14-16 of docs/plan.md.
 - Night-sample cache (`ensureNightSamples`) counts samples inside the night window (>= 10). Agreed: leave it unchanged; Task 15 instead skips workout HR samples that fall inside any stored sleep window. Of the 28 workouts in the 30-day list, 1 overlaps a stored sleep session (2026-10-15 walk, 29.4 min). Only those 28 are saved raw; the 113-workout figure is a count from the history summary.
 
-## Task 14 — Schema (new tables only; awaiting `drizzle-kit push` by the user)
+## Task 14 — Schema (new tables only; pushed and verified)
 - Two brand-new tables in `src/db/schema.ts`: `exercise_sessions` and `daily_energy`. No existing table or column changed. Workout HR reuses `heart_rate_samples` (no new table).
 - `exercise_sessions` also stores `start_utc_offset_seconds` (NOT NULL) and `end_utc_offset_seconds`, so the local `exercise_date` and midnight-crossing can be re-derived. Zone durations are four nullable columns: Task 15 must write null (not 0) when Google omits `heartRateZoneDurations`; distance is converted from millimeters to meters.
 - Unique: (user_id, google_data_point_id) and (user_id, energy_date). Index: (user_id, exercise_date).
