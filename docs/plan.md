@@ -123,3 +123,13 @@ Goal: a sync-scoped token can force a recent-window sync, for a cron job that re
 - `scripts/cron-sync.sh`: reads `TINA_API_TOKEN` from `~/tina/.env.local`, POSTs `{"force":true}` to https://tina.kindahl.org/api/v1/sync, appends one line per run (local timestamp, HTTP status, body `status`) to `~/tina/logs/cron-sync.log`, exits non-zero on non-2xx, never prints or logs the token. No crontab is installed by this task.
 - Fixtures: `runSyncLoop` with an injected fake step: force=true → first call forced, later calls unforced; force=false → no call forced; forced step then idle → `synced`. Body parser fixture.
 - No deploy in this task.
+
+## Task 21 — Strength program and logged sets (future)
+Status: not started — blocked: open question below. Do not build until it is answered.
+Extend the existing Today plan editor and exercise day log (`src/lib/today/`) rather than adding a separate workout system.
+- **Program:** per training day, exercises with target sets, reps and load. The existing snapshot rule stays: editing the program never changes past logs. Add an `updatedAt` / `version` that Freya can read.
+- **Log:** per logged day, the sets, reps and load actually done, linked to the planned session. Keep the existing statuses (planned, backup, skipped); add "modified" only if it is clearly distinct from backup. A backup still counts as showing up. No log for a day means "not logged", never "skipped".
+- **Logging UI:** quick to use on a phone during a workout. Propose the layout first, following `claude_ui-design-direction.md` (as in Task 18), before building.
+- **API:** expose the program and logs read-only in `/api/v1`, described in `/schema` (schema doc and drift guard updated, smoke test extended; honest absence: "not logged" is unavailable, never zero or skipped).
+- Any change to an existing table or column stops the task for approval (AGENTS.md); new tables are allowed.
+- **Open question (for the user, before building):** how does "modified" differ from "backup"? Until answered, add no new status.
