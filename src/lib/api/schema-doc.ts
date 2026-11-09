@@ -91,8 +91,11 @@ export const SCHEMA_DOC: SchemaDoc = {
     },
     {
       method: "POST", path: "/api/v1/sync", scope: "sync", response: "sync",
-      summary: "Runs the catch-up sync in a server-side loop (at most 8 steps or 45 seconds) and returns where it ended. The only write endpoint. Safe to call repeatedly; returns 'fresh' without contacting Google when nothing is due.",
-      params: [],
+      summary: "Runs the catch-up sync in a server-side loop (at most 8 steps or 45 seconds) and returns where it ended. The only write endpoint; needs scope 'sync' (a read-only token gets 403 whatever the body). Safe to call repeatedly; without 'force' it returns 'fresh' without contacting Google when nothing is due (the last sync is under 6 hours old, there is no gap, and the cursor is at today). Send {\"force\":true} to refresh the recent window now.",
+      params: [{
+        name: "force", required: false, type: "boolean (JSON request body, e.g. {\"force\":true})",
+        description: "Optional. true forces the FIRST step to re-sync the recent window (today and the 3 days before it) even if the last sync is under 6 hours old; this contacts Google. Later steps run unforced and normally (any older gap chunks, then one more recent-window pass if the sync cursor still lags today, then stop), so a forced call is one recent-window sync plus whatever catch-up remains, and the status is 'synced', never 'fresh'. false, absent, or no body behaves as an unforced call. Requires scope 'sync'. A body that is not valid JSON, not an object, or has a non-boolean force fails with invalid_parameter (HTTP 400).",
+      }],
     },
     {
       method: "GET", path: "/api/v1/schema", scope: "read", response: "schema",
@@ -120,14 +123,14 @@ export const SCHEMA_DOC: SchemaDoc = {
   errorCodes: {
     unauthorized: "Missing, invalid, or revoked bearer token (HTTP 401).",
     insufficient_scope: "The token is valid but lacks the required scope (HTTP 403).",
-    invalid_parameter: "A query parameter is missing or malformed (HTTP 400).",
+    invalid_parameter: "A query parameter or the request body is missing or malformed (HTTP 400).",
     range_too_large: `The requested range exceeds ${MAX_RANGE_DAYS} days (HTTP 400).`,
     not_found: "Unknown route (HTTP 404).",
     internal_error: "The server failed to answer; retry later (HTTP 500).",
   },
   syncStatuses: {
-    fresh: "Nothing was due (last sync is recent and there is no gap). No Google call was made.",
-    synced: "Work was done and nothing more is due.",
+    fresh: "Nothing was due (last sync is recent and there is no gap). No Google call was made. Never returned when force was requested.",
+    synced: "Work was done and nothing more is due. This is what a forced call returns when it completes.",
     pending: "More work remains (step/time cap reached) or another sync holds the lock. Call again later.",
     auth_required: "Google sign-in expired; the person must reconnect in the web app. Retrying will not help.",
     error: "A step failed; see 'message'. Progress made before the failure is kept.",

@@ -112,3 +112,14 @@ Context: Tina moves to a home server (Ubuntu 24.04, host TZ = UTC): one always-o
 4. `drizzle.config.ts` loads `.env.local` explicitly (already did; left unchanged).
 5. `scripts/deploy.sh`: main + clean tree only; `docker compose build app`, `up -d --no-deps app`, poll 127.0.0.1:3101 for 90 s. Never runs drizzle-kit or touches db.
 6. `.env.production` / `.env.production.*` git-ignored; `.env.production.example` lists names only.
+
+## Task 20 — Forced sync through POST /api/v1/sync
+Status: code done and committed; live verification pending (needs a raw sync-scoped token in .env.local as TINA_API_TOKEN and a deploy)
+Goal: a sync-scoped token can force a recent-window sync, for a cron job that refreshes data before scheduled check-ins. The 6-hour staleness rule and the browser sync path are unchanged.
+- `POST /api/v1/sync` accepts an optional JSON body `{ "force": true }`. No body, or `force` false/absent, behaves exactly as before. A body that is not valid JSON, is not an object, or has a non-boolean `force` returns 400 `invalid_parameter` in the standard envelope. The scope check stays the first statement: a read-only token gets 403 before the body is parsed, whether or not `force` is set.
+- Force applies to the **first step of the loop only** (a forced step always picks the recent window, so forcing every step would re-sync the same window until the 8-step/45 s cap). `runSyncLoop(deps, { force }, limits?)` passes `force` to the first `runStep` call only; every later step runs unforced (the normal plan: gap chunks, a recent-window pass if the cursor still lags today, then idle). Its return type is an explicit discriminated union (`error` carries `message`, the rest do not).
+- Status mapping: a forced call never returns `fresh`; idle after (or in place of) the forced step is `synced`.
+- `/schema` documents the `force` body param on `/sync`, what it does, and the `sync` scope; the drift fixture stays green.
+- `scripts/cron-sync.sh`: reads `TINA_API_TOKEN` from `~/tina/.env.local`, POSTs `{"force":true}` to https://tina.kindahl.org/api/v1/sync, appends one line per run (local timestamp, HTTP status, body `status`) to `~/tina/logs/cron-sync.log`, exits non-zero on non-2xx, never prints or logs the token. No crontab is installed by this task.
+- Fixtures: `runSyncLoop` with an injected fake step: force=true → first call forced, later calls unforced; force=false → no call forced; forced step then idle → `synced`. Body parser fixture.
+- No deploy in this task.
