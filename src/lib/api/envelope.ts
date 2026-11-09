@@ -11,11 +11,14 @@ export type ApiErrorCode =
   | "invalid_parameter" // malformed query parameter
   | "range_too_large" // /days range over the cap
   | "not_found" // unknown route
+  | "cooldown" // forced sync too soon after the last sync (HTTP 429)
   | "internal_error";
 
 export interface ApiError {
   code: ApiErrorCode;
   message: string;
+  /** Only with code "cooldown": whole seconds to wait before a forced sync is accepted. */
+  retryAfterSeconds?: number;
 }
 
 export interface ApiSuccess<T> {
@@ -55,8 +58,8 @@ export function buildSuccess<T>(data: T, clock: EnvelopeClock): ApiSuccess<T> {
   };
 }
 
-export function buildFailure(code: ApiErrorCode, message: string): ApiFailure {
-  return { apiVersion: API_VERSION, error: { code, message } };
+export function buildFailure(code: ApiErrorCode, message: string, extra?: { retryAfterSeconds: number }): ApiFailure {
+  return { apiVersion: API_VERSION, error: extra ? { code, message, retryAfterSeconds: extra.retryAfterSeconds } : { code, message } };
 }
 
 /** Largest /days range, in calendar days inclusive of both ends. */

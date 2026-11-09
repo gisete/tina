@@ -3,7 +3,8 @@
 # Meant for cron, shortly before a scheduled check-in. Reads TINA_API_TOKEN from ~/tina/.env.local,
 # appends one line per run to ~/tina/logs/cron-sync.log:
 #   <local timestamp> http=<code> status=<data.status or -> [error=<code>]
-# Exits non-zero on any non-2xx answer (and when the token or curl is unavailable).
+# A 429 cooldown (a sync finished under 5 minutes ago) logs status=cooldown and exits 0.
+# Exits non-zero on any other non-2xx answer (and when the token or curl is unavailable).
 # The token is never printed or logged: it reaches curl through a config on stdin, not argv.
 # A log line is written on every path, including unexpected failures (EXIT trap).
 #
@@ -58,6 +59,11 @@ unset token
 
 status="$(grep -o '"status":"[a-z_]*"' "$body_file" 2>/dev/null | head -1 | cut -d'"' -f4)"
 errcode="$(grep -o '"code":"[a-z_]*"' "$body_file" 2>/dev/null | head -1 | cut -d'"' -f4)"
+if [ "$code" = "429" ] && [ "$errcode" = "cooldown" ]; then
+  # A sync finished within the last 5 minutes: nothing to do, not a failure.
+  status="cooldown"
+  errcode=""
+fi
 line="http=$code status=${status:--}"
 [ -z "$errcode" ] || line="$line error=$errcode"
 [ "$curl_rc" -eq 0 ] || line="$line curl_rc=$curl_rc"
@@ -70,5 +76,6 @@ fi
 
 case "$code" in
   2??) exit 0 ;;
+  429) if [ "$status" = "cooldown" ]; then exit 0; fi; echo "cron-sync: HTTP 429" >&2; exit 1 ;;
   *) echo "cron-sync: HTTP $code" >&2; exit 1 ;;
 esac

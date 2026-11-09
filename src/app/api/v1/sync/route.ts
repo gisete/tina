@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
-import { authenticate, failure, success } from "@/lib/api-server/http";
-import { formatInstantWithOffset, parseSyncBody, runSyncLoop, type SyncResponseData } from "@/lib/api";
+import { authenticate, cooldownFailure, failure, success } from "@/lib/api-server/http";
+import { decideForceCooldown, formatInstantWithOffset, parseSyncBody, runSyncLoop, type SyncResponseData } from "@/lib/api";
 import { runSyncStep } from "@/lib/sync/step";
 import { readSyncState } from "@/lib/sync/sync-state";
 
@@ -15,7 +15,8 @@ export const maxDuration = 100;
  * "fresh" means nothing was due and no Google call was made. The sync lock is
  * shared with the browser-triggered sync: if it is held the answer is "pending".
  * Optional JSON body {"force": true} forces the FIRST step (the recent window) regardless of the 6-hour
- * staleness rule; later steps run normally. A forced call never answers "fresh".
+ * staleness rule; later steps run normally. A forced call never answers "fresh", and is refused with
+ * 429 "cooldown" (no lock, no Google call, no write) when the last sync finished under 5 minutes ago.
  */
 export async function POST(request: Request): Promise<Response> {
   const auth = await authenticate(request, "sync");
@@ -30,6 +31,14 @@ export async function POST(request: Request): Promise<Response> {
   const body = parseSyncBody(rawBody);
   if (!body.ok) return failure(body.code, body.message);
   try {
+    if (body.value.force) {
+      // Not atomic with the lock: two simultaneous forced calls may both pass, and the shared sync lock then
+      // makes the second one answer "pending".
+      // Cooldown: one DB read, decided before the lock, any Google call or any write.
+      const { lastSyncedAtMs } = await readSyncState(auth.userId);
+      const decision = decideForceCooldown(Date.now(), lastSyncedAtMs);
+      if (!decision.allowed) return cooldownFailure(decision.retryAfterSeconds);
+    }
     const outcome = await runSyncLoop(
       {
         runStep: ({ force }) => runSyncStep(auth.userId, { force }),

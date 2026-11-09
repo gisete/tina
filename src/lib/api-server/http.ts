@@ -21,11 +21,20 @@ const STATUS: Record<ApiErrorCode, number> = {
   invalid_parameter: 400,
   range_too_large: 400,
   not_found: 404,
+  cooldown: 429,
   internal_error: 500,
 };
 
 export function failure(code: ApiErrorCode, message: string): Response {
   return Response.json(buildFailure(code, message), { status: STATUS[code], headers: { "Cache-Control": "no-store" } });
+}
+
+/** 429 for a forced sync inside the cooldown: envelope with retryAfterSeconds plus a Retry-After header. */
+export function cooldownFailure(retryAfterSeconds: number): Response {
+  return Response.json(
+    buildFailure("cooldown", `A sync finished less than 5 minutes ago. Try again in ${retryAfterSeconds} seconds.`, { retryAfterSeconds }),
+    { status: STATUS.cooldown, headers: { "Cache-Control": "no-store", "Retry-After": String(retryAfterSeconds) } },
+  );
 }
 
 export function success<T>(data: T): Response {

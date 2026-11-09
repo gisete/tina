@@ -8,6 +8,7 @@ export * from "./state";
 export * from "./params";
 export * from "./windows";
 export * from "./sync-loop";
+export * from "./cooldown";
 export * from "./sync-request";
 export * from "./sync-response";
 export * from "./schema-doc";

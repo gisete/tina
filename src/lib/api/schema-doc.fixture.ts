@@ -80,7 +80,7 @@ mustBeClean(validateAgainstDoc("sync", SCHEMA_DOC.responses.sync, [json(syncSamp
 
 // ── envelope ──
 const clock = { nowMs: 0, offsetSeconds: 0, timezone: "UTC" };
-mustBeClean(validateAgainstDoc("envelope", SCHEMA_DOC.responses.envelope, [json(buildSuccess({}, clock)), json(buildFailure("internal_error", "x"))], { requireAll: true }));
+mustBeClean(validateAgainstDoc("envelope", SCHEMA_DOC.responses.envelope, [json(buildSuccess({}, clock)), json(buildFailure("internal_error", "x")), json(buildFailure("cooldown", "x", { retryAfterSeconds: 60 }))], { requireAll: true }));
 assert(validateEnvelope(json(buildSuccess({}, clock))).errors.length === 0, "success envelope validates");
 
 // ── schema's own top-level shape ──

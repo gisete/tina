@@ -133,3 +133,13 @@ Extend the existing Today plan editor and exercise day log (`src/lib/today/`) ra
 - **API:** expose the program and logs read-only in `/api/v1`, described in `/schema` (schema doc and drift guard updated, smoke test extended; honest absence: "not logged" is unavailable, never zero or skipped).
 - Any change to an existing table or column stops the task for approval (AGENTS.md); new tables are allowed.
 - **Open question (for the user, before building):** how does "modified" differ from "backup"? Until answered, add no new status.
+
+## Task 22 — Cooldown on forced sync (safe on-demand agent calls)
+Status: done (live test below in progress.md)
+Goal: make `POST /api/v1/sync` safe for an agent token to call on demand.
+- **Cooldown:** with `force: true`, if `sync_state.last_synced_at` is less than 5 minutes ago, return 429 in the standard error envelope with `code: "cooldown"` and `retryAfterSeconds`, plus a `Retry-After` header. No Google call, no lock, no DB write. Uses the existing `last_synced_at` only (no new table or column). Unforced calls keep the 6-hour rule; the browser sync paths are untouched. The scope check stays first (a read-only token gets 403 before anything else).
+- **Decision in a pure function** (`now`, `lastSyncedAt` → allowed, or `retryAfterSeconds`) with an explicit return type. Fixture: null → allowed; 4 min ago → 429 with ~60 s; 5+ min ago → allowed.
+- **Response:** every successful `/sync` response carries `lastSyncedAt` and `syncedThrough`, read after the loop (already the case in the flat `data` shape; kept and documented), so a caller can tell a sync happened even when no new data arrived.
+- `/schema` documents the cooldown, the 429 and the response shape for `/sync`; the drift fixture stays green.
+- `scripts/cron-sync.sh`: a 429 logs `http=429 status=cooldown` and exits 0 (a sync just happened).
+- Verify: `npm run check`; deploy with `scripts/deploy.sh`; live test with the server token: two forced syncs back to back → the first `synced` with `lastSyncedAt`, the second 429 with `retryAfterSeconds` under 300.

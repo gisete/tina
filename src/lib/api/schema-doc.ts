@@ -91,10 +91,10 @@ export const SCHEMA_DOC: SchemaDoc = {
     },
     {
       method: "POST", path: "/api/v1/sync", scope: "sync", response: "sync",
-      summary: "Runs the catch-up sync in a server-side loop (at most 8 steps or 45 seconds) and returns where it ended. The only write endpoint; needs scope 'sync' (a read-only token gets 403 whatever the body). Safe to call repeatedly; without 'force' it returns 'fresh' without contacting Google when nothing is due (the last sync is under 6 hours old, there is no gap, and the cursor is at today). Send {\"force\":true} to refresh the recent window now.",
+      summary: "Runs the catch-up sync in a server-side loop (at most 8 steps or 45 seconds) and returns where it ended. The only write endpoint; needs scope 'sync' (a read-only token gets 403 whatever the body). Safe to call repeatedly; without 'force' it returns 'fresh' without contacting Google when nothing is due (the last sync is under 6 hours old, there is no gap, and the cursor is at today). Send {\"force\":true} to refresh the recent window now; forced calls are limited to one per 5 minutes (HTTP 429, code 'cooldown'). Every successful response carries lastSyncedAt and syncedThrough read after the loop, so you can tell a sync happened even when no new data arrived.",
       params: [{
         name: "force", required: false, type: "boolean (JSON request body, e.g. {\"force\":true})",
-        description: "Optional. true forces the FIRST step to re-sync the recent window (today and the 3 days before it) even if the last sync is under 6 hours old; this contacts Google. Later steps run unforced and normally (any older gap chunks, then one more recent-window pass if the sync cursor still lags today, then stop), so a forced call is one recent-window sync plus whatever catch-up remains, and the status is 'synced', never 'fresh'. false, absent, or no body behaves as an unforced call. Requires scope 'sync'. A body that is not valid JSON, not an object, or has a non-boolean force fails with invalid_parameter (HTTP 400).",
+        description: "Optional. true forces the FIRST step to re-sync the recent window (today and the 3 days before it) even if the last sync is under 6 hours old; this contacts Google. Later steps run unforced and normally (any older gap chunks, then one more recent-window pass if the sync cursor still lags today, then stop), so a forced call is one recent-window sync plus whatever catch-up remains, and the status is 'synced', never 'fresh'. false, absent, or no body behaves as an unforced call. Requires scope 'sync'. Cooldown: if the last successful sync (state.sync.lastSyncedAt) finished less than 5 minutes ago, a forced call is refused with HTTP 429, error code 'cooldown', error.retryAfterSeconds and a Retry-After header; nothing is locked, fetched or written, so the stored data was refreshed moments ago. A body that is not valid JSON, not an object, or has a non-boolean force fails with invalid_parameter (HTTP 400).",
       }],
     },
     {
@@ -126,6 +126,7 @@ export const SCHEMA_DOC: SchemaDoc = {
     invalid_parameter: "A query parameter or the request body is missing or malformed (HTTP 400).",
     range_too_large: `The requested range exceeds ${MAX_RANGE_DAYS} days (HTTP 400).`,
     not_found: "Unknown route (HTTP 404).",
+    cooldown: "A forced POST /api/v1/sync came less than 5 minutes after the last successful sync (HTTP 429). error.retryAfterSeconds and the Retry-After header say how long to wait. No sync was started; a sync has just happened.",
     internal_error: "The server failed to answer; retry later (HTTP 500).",
   },
   syncStatuses: {
@@ -141,7 +142,8 @@ export const SCHEMA_DOC: SchemaDoc = {
       generatedAt: { kind: "instant", description: "When the response was produced, ISO 8601 with the server's UTC offset.", optional: true },
       timezone: { kind: "string", description: "IANA zone of the server; calendar dates and generatedAt offset belong to it.", optional: true },
       data: { kind: "object", description: "The endpoint payload (success only).", optional: true },
-      "error.code": { kind: "enum", description: "Machine-readable error code; see errorCodes (failure only).", optional: true, values: ["unauthorized", "insufficient_scope", "invalid_parameter", "range_too_large", "not_found", "internal_error"] },
+      "error.code": { kind: "enum", description: "Machine-readable error code; see errorCodes (failure only).", optional: true, values: ["unauthorized", "insufficient_scope", "invalid_parameter", "range_too_large", "not_found", "cooldown", "internal_error"] },
+      "error.retryAfterSeconds": { kind: "number", unit: "s", description: "Whole seconds to wait before a forced sync is accepted again (failure with code 'cooldown' only; also sent as the Retry-After header).", optional: true },
       "error.message": { kind: "string", description: "Human-readable explanation (failure only).", optional: true },
     },
     days: {
@@ -217,8 +219,8 @@ export const SCHEMA_DOC: SchemaDoc = {
     sync: {
       status: { kind: "enum", values: ["fresh", "synced", "pending", "auth_required", "error"], description: "Outcome of the call; the meaning of each value is in syncStatuses. Branch on this, not the HTTP code (error and auth_required also answer 200)." },
       stepsRun: { kind: "number", unit: "steps", description: "Catch-up steps that did work in this call." },
-      syncedThrough: { kind: "date", description: "Sync cursor after the call (see state.sync.syncedThrough)." },
-      lastSyncedAt: { kind: "instant", description: "Last successful recent-window sync after the call; null if never." },
+      syncedThrough: { kind: "date", description: "Sync cursor after the call (see state.sync.syncedThrough). Present on every successful response (null if not tracked); read after the loop." },
+      lastSyncedAt: { kind: "instant", description: "Last successful recent-window sync after the call; null if never. Present on every successful response; read after the loop, so a changed value shows that a sync happened even when no new data arrived." },
       message: { kind: "string", description: "Error detail when status is 'error'.", optional: true },
     },
   },

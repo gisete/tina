@@ -173,3 +173,10 @@ Secondary finding: 2026-10-16 has light 0 with 9,421 steps — zone data was mis
 - **Verified:** `npm run check` exit 0 on Node 22 (19 fixtures). The host default Node is 18, which `next build` rejects; use `~/.nvm/versions/node/v22.23.4`. The smoke test skipped itself: `TINA_API_TOKEN` is not set in `.env.local`.
 - **Review (general-purpose agent with the code-reviewer brief; the project agent is not registered in this session):** no blocking findings; applied the wording, URL-guard, curl_rc and body-read fixes.
 - **Not done:** the live forced/unforced calls and the cron run (no raw token available). See the Task 20 status in plan.md.
+
+## Task 22 — Cooldown on forced sync
+- **Code:** forced `POST /api/v1/sync` calls are refused with 429 (`code: "cooldown"`, `error.retryAfterSeconds`, `Retry-After` header) when `sync_state.last_synced_at` is under 5 minutes old. Decided by the pure `decideForceCooldown` (`src/lib/api/cooldown.ts`, fixture) after the scope check and body parse, with one `sync_state` SELECT: no lock, no Google call, no write. Unforced calls (6-hour rule) and the browser paths are untouched. No new table or column. The cooldown is not atomic with the sync lock; the lock still serialises two simultaneous forced calls.
+- **Response:** `lastSyncedAt` and `syncedThrough` were already read after the loop in the flat `data` shape; kept and documented (not nested under `sync.`, which would break the v1 contract).
+- **Schema:** `cooldown` error code, `error.retryAfterSeconds`, `/sync` summary and `force` param text. Drift fixture extended with a cooldown failure.
+- **cron-sync.sh:** a 429 `cooldown` logs `http=429 status=cooldown` and exits 0; any other 429 still exits 1.
+- **Verified:** `npm run check` exit 0 on Node 22 (20 fixtures; smoke skipped with `TINA_SMOKE_SKIP_UNREACHABLE=1`, no dev server). Reviewed by a general-purpose agent with the code-reviewer brief: no blocking findings.
