@@ -96,7 +96,7 @@ Additional fixtures and rules (decided after the Task 15 backfill):
 
 
 ## Task 17 — API
-Status: not started
+Status: done (see progress.md)
 Add exercises and daily energy to `/api/v1/day` and `/days` with honest absence. A day with no workouts is measured zero only if that day has been synced, otherwise `not_synced`. Update the schema doc and the drift guard, and extend the smoke test.
 
 ## Task 18 — UI

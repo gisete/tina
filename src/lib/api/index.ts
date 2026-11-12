@@ -4,6 +4,7 @@ export * from "./token";
 export * from "./time";
 export * from "./envelope";
 export * from "./day";
+export * from "./exercise-day";
 export * from "./state";
 export * from "./params";
 export * from "./windows";

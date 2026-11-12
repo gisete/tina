@@ -7,6 +7,7 @@ import { calculateActiveZoneMinutes } from "@/lib/analytics/activity";
 import { selectMainSessions, type CardiacStrain, type LastNightDetail, type NightHeartSummary, type SleepStageType } from "@/lib/analytics/sleep";
 import { dayMetric, classifyAbsence, type AbsenceContext } from "./absence";
 import { derived, estimated, measured, unavailable, type MetricValue } from "./metric";
+import { buildExerciseBlocks, type EnergyBlock, type ExerciseBlock, type ExerciseDayInput } from "./exercise-day";
 import { formatInstantWithOffset } from "./time";
 
 // ── Output types ───────────────────────────────────────────────────────────
@@ -88,6 +89,9 @@ export interface DayData {
   /** Active zone minutes computed live from the stored zone minutes (see schema for caveats). */
   activeZoneMinutes: MetricValue;
   heartZoneMinutes: { light: MetricValue; moderate: MetricValue; vigorous: MetricValue; peak: MetricValue };
+  /** Workouts that STARTED on this local date; see ExerciseBlock. */
+  exercise: ExerciseBlock;
+  energy: EnergyBlock;
 }
 
 // ── Input types (plain primitives) ─────────────────────────────────────────
@@ -124,6 +128,7 @@ export interface DayInput extends AbsenceContext {
     vigorous: number | null;
     peak: number | null;
   } | null;
+  exercise: ExerciseDayInput;
 }
 
 // ── Builder ────────────────────────────────────────────────────────────────
@@ -233,6 +238,8 @@ export function buildDayData(input: DayInput): DayData {
       ? { light: a.light, moderate: a.moderate, vigorous: a.vigorous, peak: a.peak }
       : null;
 
+  const { exercise, energy } = buildExerciseBlocks(input.date, input.today, input.syncedThrough, input.exercise);
+
   return {
     date: input.date,
     sleep: {
@@ -249,5 +256,7 @@ export function buildDayData(input: DayInput): DayData {
       ? derived(calculateActiveZoneMinutes(zones), "min", input.date === input.today ? ["partial_day"] : undefined)
       : unavailable(classifyAbsence(input.date, ctx)),
     heartZoneMinutes: { light: zone(a?.light), moderate: zone(a?.moderate), vigorous: zone(a?.vigorous), peak: zone(a?.peak) },
+    exercise,
+    energy,
   };
 }

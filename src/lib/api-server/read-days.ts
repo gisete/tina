@@ -2,12 +2,13 @@
 // intra-night HR samples are read from the cache table and never fetched.
 // Scores come from the same assembleDashboardData the dashboard uses.
 
-import { and, asc, desc, eq, gte, lt, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, lte, min, or } from "drizzle-orm";
 import { db } from "@/db/client";
-import { dailyActivitySummaries, heartRateSamples, heartRateSummaries, sleepSessions, syncState } from "@/db/schema";
+import { dailyActivitySummaries, dailyEnergy, exerciseSessions, heartRateSamples, heartRateSummaries, sleepSessions, syncState } from "@/db/schema";
 import { assembleDashboardData, type SleepSessionRow } from "@/lib/sync/assemble";
 import { resolveSelectedNight, selectMainSessions } from "@/lib/analytics/sleep";
-import { localToday } from "@/lib/dates";
+import { addDays, localToday, parseLocalDate } from "@/lib/dates";
+import type { WorkoutInput } from "@/lib/analytics/exercise";
 import { buildDayData, enumerateDates, rowsBeforeDay, type DayData, type SessionInput } from "@/lib/api";
 
 /** Mirrors readDashboardData's limits so a day's score matches the dashboard's. */
@@ -32,11 +33,38 @@ function toSessionInput(r: SleepSessionRow): SessionInput {
   };
 }
 
+type ExerciseSessionRow = typeof exerciseSessions.$inferSelect;
+
+function toWorkoutInput(r: ExerciseSessionRow, samples: Array<{ tMs: number; bpm: number }>): WorkoutInput {
+  const startMs = r.startTime.getTime();
+  const endMs = r.endTime.getTime();
+  return {
+    id: r.id,
+    exerciseDate: r.exerciseDate,
+    exerciseType: r.exerciseType,
+    displayName: r.displayName,
+    startMs,
+    endMs,
+    startUtcOffsetSeconds: r.startUtcOffsetSeconds,
+    endUtcOffsetSeconds: r.endUtcOffsetSeconds,
+    activeDurationSeconds: r.activeDurationSeconds,
+    caloriesKcal: r.caloriesKcal,
+    distanceMeters: r.distanceMeters,
+    avgHeartRateBpm: r.avgHeartRateBpm,
+    lightZoneSeconds: r.lightZoneSeconds,
+    moderateZoneSeconds: r.moderateZoneSeconds,
+    vigorousZoneSeconds: r.vigorousZoneSeconds,
+    peakZoneSeconds: r.peakZoneSeconds,
+    recordingMethod: r.recordingMethod,
+    hrSamples: samples.filter((p) => p.tMs >= startMs && p.tMs <= endMs),
+  };
+}
+
 export async function loadDays(userId: string, from: string, to: string): Promise<DayData[]> {
   const today = localToday();
   const dates = enumerateDates(from, to);
 
-  const [beforeRange, inRange, heartRows, activityRows, syncRow] = await Promise.all([
+  const [beforeRange, inRange, heartRows, activityRows, syncRow, sessionRows, energyRows, energyStart, sessionStart] = await Promise.all([
     // Exactly the dashboard's window for the first day: the 90 newest rows before it.
     db.query.sleepSessions.findMany({
       where: and(eq(sleepSessions.userId, userId), lt(sleepSessions.sleepDate, from)),
@@ -64,6 +92,17 @@ export async function loadDays(userId: string, from: string, to: string): Promis
       ),
     }),
     db.query.syncState.findFirst({ where: eq(syncState.userId, userId) }),
+    // Workouts listed under the local date of their start (exercise_date), and the day's energy row. DB only.
+    db.query.exerciseSessions.findMany({
+      where: and(eq(exerciseSessions.userId, userId), gte(exerciseSessions.exerciseDate, from), lte(exerciseSessions.exerciseDate, to)),
+      orderBy: [asc(exerciseSessions.startTime)],
+    }),
+    db.query.dailyEnergy.findMany({
+      where: and(eq(dailyEnergy.userId, userId), gte(dailyEnergy.energyDate, from), lte(dailyEnergy.energyDate, to)),
+    }),
+    // When the exercise slice was first fetched: older days were never synced for exercise, whatever the cursor says.
+    db.select({ d: min(dailyEnergy.energyDate) }).from(dailyEnergy).where(eq(dailyEnergy.userId, userId)),
+    db.select({ d: min(exerciseSessions.exerciseDate) }).from(exerciseSessions).where(eq(exerciseSessions.userId, userId)),
   ]);
 
   // The night each day displays: the newest main session before it (nightOf = day − 1 when recorded).
@@ -85,6 +124,41 @@ export async function loadDays(userId: string, from: string, to: string): Promis
           orderBy: [asc(heartRateSamples.timestamp)],
         })
       : [];
+
+  // Stored HR samples inside each workout window (cache only, never fetched).
+  const workoutClauses = sessionRows.map((r) => and(gte(heartRateSamples.timestamp, r.startTime), lte(heartRateSamples.timestamp, r.endTime)));
+  const workoutSampleRows =
+    workoutClauses.length > 0
+      ? await db
+          .select({ timestamp: heartRateSamples.timestamp, bpm: heartRateSamples.bpm })
+          .from(heartRateSamples)
+          .where(and(eq(heartRateSamples.userId, userId), or(...workoutClauses)))
+          .orderBy(asc(heartRateSamples.timestamp))
+      : [];
+  const workoutSamples = workoutSampleRows.map((p) => ({ tMs: p.timestamp.getTime(), bpm: p.bpm }));
+  const sessionsByDate = new Map<string, WorkoutInput[]>();
+  for (const r of sessionRows) {
+    const list = sessionsByDate.get(r.exerciseDate) ?? [];
+    list.push(toWorkoutInput(r, workoutSamples));
+    sessionsByDate.set(r.exerciseDate, list);
+  }
+  const energyByDate = new Map(energyRows.map((r) => [r.energyDate, r]));
+  const coverageStart = [energyStart[0]?.d ?? null, sessionStart[0]?.d ?? null].filter((d): d is string => d !== null).sort()[0] ?? null;
+
+  // Wear evidence only matters where active calories are null or the energy row is missing (the resting-only-fill
+  // rule): a heart summary row or any stored HR sample that local day. Today is skipped (the engine ignores it).
+  // Checked one day at a time (an indexed LIMIT 1 each, at most MAX_RANGE_DAYS), so the pool is never flooded.
+  const heartDates = new Set(heartRows.map((r) => r.date));
+  const needEvidence = dates.filter((d) => d !== today && !heartDates.has(d) && (energyByDate.get(d)?.activeCaloriesKcal ?? null) === null);
+  const sampleDays = new Set<string>();
+  for (const d of needEvidence) {
+    const rows = await db
+      .select({ id: heartRateSamples.id })
+      .from(heartRateSamples)
+      .where(and(eq(heartRateSamples.userId, userId), gte(heartRateSamples.timestamp, parseLocalDate(d)), lt(heartRateSamples.timestamp, parseLocalDate(addDays(d, 1)))))
+      .limit(1);
+    if (rows.length > 0) sampleDays.add(d);
+  }
 
   const syncedThrough = syncRow?.syncedThrough ?? null;
   const activityByDate = new Map(activityRows.map((r) => [r.activityDate, r]));
@@ -134,6 +208,13 @@ export async function loadDays(userId: string, from: string, to: string): Promis
             peak: activity.peakMinutes,
           }
         : null,
+      exercise: {
+        sessions: sessionsByDate.get(date) ?? [],
+        coverageStart,
+        totalCaloriesKcal: energyByDate.get(date)?.totalCaloriesKcal ?? null,
+        activeCaloriesKcal: energyByDate.get(date)?.activeCaloriesKcal ?? null,
+        hasWearEvidence: heartDates.has(date) || sampleDays.has(date),
+      },
     });
   });
 }

@@ -4,6 +4,7 @@
 // appears, a unit or primitive type disagrees, or an enum value is undocumented.
 import { assembleDashboardData, type SleepSessionRow } from "@/lib/sync/assemble";
 import { buildDayData, type DayInput, type SessionInput } from "./day";
+import type { WorkoutInput } from "@/lib/analytics/exercise";
 import { buildStateData } from "./state";
 import { buildSuccess, buildFailure } from "./envelope";
 import { SCHEMA_DOC } from "./schema-doc";
@@ -47,8 +48,34 @@ const full: DayInput = {
   lastNight: assembled.lastNight, nightHeart: assembled.nightHeart, cardiacStrain: assembled.cardiacStrain,
   hasNightSamples: true, restingHeartRate: 60, hrv: 40,
   activity: { steps: 1, light: 1, moderate: 1, vigorous: 1, peak: 1 },
+  exercise: { sessions: [], coverageStart: "2026-03-11", totalCaloriesKcal: 2100, activeCaloriesKcal: 400, hasWearEvidence: true },
 };
-const recorded = buildDayData(full);
+
+// Workouts: one with stored HR samples and zones, one manual without HR, zones or calories.
+const workout = (over: Partial<WorkoutInput>): WorkoutInput => ({
+  id: "w", exerciseDate: "2026-10-27", exerciseType: "WALKING", displayName: "Walk",
+  startMs: Date.UTC(2026, 9, 27, 17, 0, 0), endMs: Date.UTC(2026, 9, 27, 17, 30, 0), startUtcOffsetSeconds: 3600, endUtcOffsetSeconds: 3600,
+  activeDurationSeconds: 1500, caloriesKcal: 120, distanceMeters: 2000, avgHeartRateBpm: 100,
+  lightZoneSeconds: 1500, moderateZoneSeconds: 300, vigorousZoneSeconds: 0, peakZoneSeconds: 0,
+  recordingMethod: "ACTIVELY_MEASURED", hrSamples: [{ tMs: Date.UTC(2026, 9, 27, 17, 10, 0), bpm: 95 }, { tMs: Date.UTC(2026, 9, 27, 17, 20, 0), bpm: 110 }], ...over,
+});
+const withWorkouts: DayInput = {
+  ...full,
+  exercise: {
+    ...full.exercise,
+    sessions: [
+      workout({ id: "a" }),
+      workout({ id: "b", exerciseType: "SPORT", displayName: null, recordingMethod: "MANUAL", caloriesKcal: null, distanceMeters: 0, avgHeartRateBpm: null, hrSamples: [],
+        lightZoneSeconds: null, moderateZoneSeconds: null, vigorousZoneSeconds: null, peakZoneSeconds: null }),
+    ],
+  },
+};
+// Synced day without workouts (sessions = []), a not-synced day, and a resting-only-fill day.
+const noWorkouts = buildDayData({ ...full, exercise: { ...full.exercise, sessions: [] } });
+const notSynced = buildDayData({ ...full, syncedThrough: "2026-10-20" });
+const restingFill = buildDayData({ ...full, exercise: { ...full.exercise, totalCaloriesKcal: 1488.3264, activeCaloriesKcal: null, hasWearEvidence: false } });
+const noActive = buildDayData({ ...full, exercise: { ...full.exercise, activeCaloriesKcal: null } });
+const recorded = buildDayData(withWorkouts);
 const missing = buildDayData({ ...full, nightSessions: [], lastNight: null, nightHeart: null, cardiacStrain: null, hasNightSamples: false, restingHeartRate: null, hrv: null, activity: null });
 // Same night with no stored samples: HR-estimated fields become unavailable, units unchecked there.
 const noSamples = buildDayData({ ...full, cardiacStrain: null, hasNightSamples: false });
@@ -58,8 +85,8 @@ assert(recorded.sleep.main.status === "recorded" && recorded.sleep.main.restless
 assert(recorded.sleep.main.status === "recorded" && recorded.sleep.main.cardiacStrain.strainRecoveryScore.status === "derived", "sample has cardiac strain");
 
 // ── day ── (requireAll across the union of samples)
-mustBeClean(validateAgainstDoc("day", SCHEMA_DOC.responses.day, [json(recorded), json(missing), json(noSamples)], { requireAll: true }));
-for (const d of [recorded, missing, noSamples]) mustBeClean(validateMetricShapes(json(d)));
+mustBeClean(validateAgainstDoc("day", SCHEMA_DOC.responses.day, [json(recorded), json(missing), json(noSamples), json(noWorkouts), json(notSynced), json(restingFill), json(noActive)], { requireAll: true }));
+for (const d of [recorded, missing, noSamples, noWorkouts, notSynced, restingFill, noActive]) mustBeClean(validateMetricShapes(json(d)));
 
 // ── days wrapper ──
 const daysPayload = { from: "2026-10-27", to: "2026-10-27", days: [recorded] };

@@ -59,6 +59,7 @@ const base: DayInput = {
   hasNightSamples: false,
   restingHeartRate: 60, hrv: 40,
   activity: { steps: 0, light: 900, moderate: 10, vigorous: 2, peak: 1 },
+  exercise: { sessions: [], coverageStart: "2026-03-11", totalCaloriesKcal: 2100, activeCaloriesKcal: 400, hasWearEvidence: true },
 };
 const day = buildDayData(base);
 

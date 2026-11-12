@@ -70,6 +70,47 @@ function dayChecks(name: string, day: Json | null): void {
   if (isToday && azm?.status === "derived" && !azm.flags?.includes("partial_day")) failures.push(`${name}: today's activeZoneMinutes must carry the partial_day flag`);
   if (!azmOk) failures.push(`${name}: activeZoneMinutes must be derived (non-negative number, unit min) or unavailable with a reason other than not_supported`);
   checks += 1;
+  exerciseChecks(name, day);
+}
+
+const LOCAL_INSTANT = /^(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
+const METHOD_KINDS = ["tracked", "auto_detected", "manual", "unknown"];
+
+/** The exercise/energy blocks: honest absence, start-date listing, offsets, nulls never 0. */
+function exerciseChecks(name: string, day: Json): void {
+  const d = day as { date?: string; exercise?: Obj; energy?: Obj };
+  const ex = d.exercise;
+  if (ex === undefined || typeof ex !== "object") { failures.push(`${name}: exercise block missing`); return; }
+  if (ex.status === "unavailable") {
+    if (ex.reason !== "not_synced" || "sessions" in ex) failures.push(`${name}: unavailable exercise must be {reason:not_synced} with no sessions`);
+  } else if (ex.status === "synced") {
+    const sessions = ex.sessions;
+    if (!Array.isArray(sessions)) { failures.push(`${name}: synced exercise.sessions must be an array (possibly empty)`); return; }
+    const summary = ex.summary as Obj;
+    if (summary.workoutCount !== sessions.length) failures.push(`${name}: summary.workoutCount must equal sessions.length`);
+    if (sessions.length === 0 && summary.workoutCaloriesKcal !== 0) failures.push(`${name}: an empty synced day has a measured zero of workout calories`);
+    for (const raw of sessions) {
+      const w = raw as Obj;
+      const start = typeof w.startLocal === "string" ? LOCAL_INSTANT.exec(w.startLocal) : null;
+      const end = typeof w.endLocal === "string" ? LOCAL_INSTANT.exec(w.endLocal) : null;
+      if (start === null || end === null) { failures.push(`${name}: session ${String(w.id)} startLocal/endLocal must be ISO 8601 with an offset`); continue; }
+      if (start[1] !== w.date || w.date !== d.date) failures.push(`${name}: session ${String(w.id)} is listed under ${String(d.date)} but starts ${start[1]} (start-date rule)`);
+      if (end[1] !== w.endDate || (w.endDate !== w.date) !== w.crossesMidnight) failures.push(`${name}: session ${String(w.id)} endDate/crossesMidnight inconsistent`);
+      if (typeof w.durationMinutes !== "number" || w.durationMinutes < 0) failures.push(`${name}: session ${String(w.id)} durationMinutes must be a non-negative number`);
+      if (typeof w.activeDurationMinutes !== "number" || w.activeDurationMinutes < 0) failures.push(`${name}: session ${String(w.id)} activeDurationMinutes must be a non-negative number`);
+      if (!METHOD_KINDS.includes(String((w.recordingMethod as Obj).kind)) || typeof (w.recordingMethod as Obj).raw !== "string") failures.push(`${name}: session ${String(w.id)} recordingMethod invalid`);
+      for (const [k, v] of Object.entries(w.zoneMinutes as Obj)) if (v !== null && (typeof v !== "number" || v < 0)) failures.push(`${name}: session ${String(w.id)} zoneMinutes.${k} must be null or >= 0`);
+      if (w.hasHeartRateSamples === true ? w.heartRate === null : w.heartRate !== null) failures.push(`${name}: session ${String(w.id)} heartRate must be null exactly when hasHeartRateSamples is false`);
+      if (w.caloriesKcal === 0 || w.averageHeartRate === 0 || w.distanceMeters === 0) failures.push(`${name}: session ${String(w.id)} has a 0 where null was expected`);
+    }
+  } else {
+    failures.push(`${name}: exercise.status must be synced or unavailable`);
+  }
+  for (const key of ["totalCalories", "activeCalories"] as const) {
+    const m = (d.energy ?? {})[key] as Obj | undefined;
+    if (m === undefined || (m.status === "unavailable" ? typeof m.reason !== "string" : m.unit !== "kcal" || typeof m.value !== "number" || m.value < 0)) failures.push(`${name}: energy.${key} must be kcal >= 0 or unavailable with a reason`);
+  }
+  checks += 1;
 }
 
 type Obj = { [k: string]: Json };
@@ -143,6 +184,7 @@ async function main(): Promise<void> {
     );
     expect(walkFields(ancient).every((f) => f.isMetric || typeof f.value !== "number"), "day(2000-01-01): no plain numeric field on a date with no data");
     expect(asObj(asObj(asObj(ancient).sleep).main).status === "unavailable", "day(2000-01-01): sleep.main is unavailable");
+    expect(asObj(asObj(ancient).exercise).status === "unavailable" && asObj(asObj(ancient).exercise).reason === "not_synced", "day(2000-01-01): exercise is unavailable/not_synced (an empty array would claim 'synced, no workouts')");
     for (const key of ["restingHeartRate", "hrv", "steps", "activeZoneMinutes"]) {
       const m = asObj(asObj(ancient)[key]);
       expect(m.status === "unavailable" && typeof m.reason === "string", `day(2000-01-01): ${key} is unavailable with a reason`);
