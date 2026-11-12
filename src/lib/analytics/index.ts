@@ -3,3 +3,4 @@
 
 export * from "./heart";
 export * from "./hr-trends";
+export * from "./exercise";
