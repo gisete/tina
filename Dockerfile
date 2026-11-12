@@ -27,8 +27,8 @@ FROM base AS runtime
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000
-RUN groupadd --system --gid 1001 tina \
- && useradd --system --uid 1001 --gid tina --no-create-home tina
+RUN groupadd --system --gid 10001 tina \
+ && useradd --system --uid 10001 --gid tina --no-create-home tina
 COPY --from=build --chown=tina:tina /app/.next/standalone ./
 COPY --from=build --chown=tina:tina /app/.next/static ./.next/static
 COPY --from=build --chown=tina:tina /app/public ./public
